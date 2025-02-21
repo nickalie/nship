@@ -1,0 +1,7 @@
+version: '3'
+
+tasks:
+  build:
+    dir: cmd
+    cmds:
+      - go build -o ../bin/ngdeploy.exe
