@@ -2,3 +2,4 @@
 *.zip
 deploy.yaml
 bin
+cmd/testdata
