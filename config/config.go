@@ -73,6 +73,8 @@ func LoadConfig(configPath string) (*Config, error) {
 		config, err = loadTypeScriptConfig(configPath)
 	case ".js", ".mjs":
 		config, err = loadJavaScriptConfig(configPath)
+	case ".go":
+		config, err = loadGolangConfig(configPath)
 	default:
 		return nil, fmt.Errorf("unsupported config file extension: %s", ext)
 	}
@@ -89,6 +91,10 @@ func LoadConfig(configPath string) (*Config, error) {
 	}
 
 	return config, nil
+}
+
+func loadGolangConfig(configPath string) (*Config, error) {
+	return loadCmdConfig("", "go", "run", configPath)
 }
 
 func formatValidationErrors(errors validator.ValidationErrors) string {
@@ -155,8 +161,12 @@ func loadTypeScriptConfig(configPath string) (*Config, error) {
 }
 
 func loadJavaScriptConfig(configPath string) (*Config, error) {
-	cmd := exec.Command("node", "-e", fmt.Sprintf("(async ()=>{const m=await import(\"./%s\");console.log(JSON.stringify(typeof m.default==='function'?await m.default():m.default));})();", filepath.Base(configPath)))
-	cmd.Dir = filepath.Dir(configPath)
+	return loadCmdConfig(filepath.Dir(configPath), "node", "-e", fmt.Sprintf("(async ()=>{const m=await import(\"./%s\");console.log(JSON.stringify(typeof m.default==='function'?await m.default():m.default));})();", filepath.Base(configPath)))
+}
+
+func loadCmdConfig(dir string, args ...string) (*Config, error) {
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Dir = dir
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
