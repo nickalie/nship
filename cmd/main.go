@@ -193,7 +193,7 @@ func resolveVaultPassword(passwordFlag string, envPath string) (*string, error) 
 }
 
 func main() {
-	configPath := flag.String("config", "deploy.yaml", "Path to YAML configuration file")
+	configPath := flag.String("config", "deploy.yaml", "Path to configuration file")
 	jobName := flag.String("job", "", "Name of specific job to run")
 	envPath := flag.String("env", "", "Path to .env file")
 	vaultPassword := flag.String("vault-password", "", "Password for Ansible Vault file")
