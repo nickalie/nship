@@ -4,142 +4,172 @@ import (
 	"bufio"
 	"flag"
 	"fmt"
-	"github.com/joho/godotenv"
-	"github.com/sosedoff/ansible-vault-go"
 	"os"
 	"strings"
+	"syscall"
 
+	"github.com/joho/godotenv"
+	"github.com/sosedoff/ansible-vault-go"
 	"golang.org/x/term"
 	"ngdeploy/config"
 	"ngdeploy/pkg/job"
-	"syscall"
 )
 
-func main() {
-	configPath := flag.String("config", "deploy.yaml", "Path to YAML configuration file")
-	jobName := flag.String("job", "", "Name of specific job to run (runs all jobs if not specified)")
-	envPath := flag.String("env", "", "Path to .env file")
-	vaultPassword := flag.String("vault-password", "", "Password for Ansible Vault file")
-	flag.Parse()
+type godotenvWrapper struct{}
 
-	vaultPassword, err := getVaultPassword(*vaultPassword, *envPath)
-	if err != nil {
-		fmt.Println(err)
-		os.Exit(1)
-	}
-
-	if err := loadEnvFile(*envPath, *vaultPassword); err != nil {
-		fmt.Printf("Error loading .env file: %v\n", err)
-		os.Exit(1)
-	}
-
-	cfg, err := config.LoadConfig(*configPath)
-	if err != nil {
-		fmt.Printf("Error loading config: %v\n", err)
-		os.Exit(1)
-	}
-
-	jobsToRun, err := getJobsToRun(cfg, *jobName)
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		os.Exit(1)
-	}
-
-	runJobs(cfg, jobsToRun)
+func (g *godotenvWrapper) Load(filename string) error {
+	return godotenv.Load(filename)
 }
 
-func loadEnvFile(envPath, vaultPassword string) error {
+func (g *godotenvWrapper) Unmarshal(text string) (map[string]string, error) {
+	return godotenv.Unmarshal(text)
+}
+
+type vaultWrapper struct{}
+
+func (v *vaultWrapper) Decrypt(content, password string) (string, error) {
+	return vault.Decrypt(content, password)
+}
+
+type EnvLoader interface {
+	Load(filename string) error
+	Unmarshal(text string) (map[string]string, error)
+}
+
+type VaultDecrypter interface {
+	Decrypt(content, password string) (string, error)
+}
+
+type App struct {
+	envLoader      EnvLoader
+	vaultDecrypter VaultDecrypter
+	config         *config.Config
+	jobRunner      job.Runner
+}
+
+func NewApp() *App {
+	return &App{
+		envLoader:      &godotenvWrapper{},
+		vaultDecrypter: &vaultWrapper{},
+		jobRunner:      job.RunJob,
+	}
+}
+
+func (a *App) Run(configPath, jobName, envPath string, vaultPassword *string) error {
+	if err := a.loadEnvironment(envPath, vaultPassword); err != nil {
+		return fmt.Errorf("environment loading failed: %w", err)
+	}
+
+	if err := a.loadConfig(configPath); err != nil {
+		return fmt.Errorf("config loading failed: %w", err)
+	}
+
+	jobs, err := a.getJobsToRun(jobName)
+	if err != nil {
+		return fmt.Errorf("job selection failed: %w", err)
+	}
+
+	return a.executeJobs(jobs)
+}
+
+func (a *App) loadEnvironment(envPath string, vaultPassword *string) error {
 	if envPath == "" {
 		return nil
 	}
 
 	if strings.HasSuffix(envPath, ".vault") {
-		return loadAnsibleVaultFile(envPath, vaultPassword)
+		return a.loadVaultFile(envPath, *vaultPassword)
 	}
 
-	return godotenv.Load(envPath)
+	return a.envLoader.Load(envPath)
 }
 
-func loadAnsibleVaultFile(envPath, vaultPassword string) error {
-	if vaultPassword == "" {
-		return fmt.Errorf("vault password is required for Ansible Vault file")
+func (a *App) loadVaultFile(path, password string) error {
+	if password == "" {
+		return fmt.Errorf("vault password is required")
 	}
 
-	data, err := os.ReadFile(envPath)
+	data, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read vault file: %w", err)
 	}
 
-	decrypted, err := vault.Decrypt(string(data), vaultPassword)
+	decrypted, err := a.vaultDecrypter.Decrypt(string(data), password)
 	if err != nil {
-		return fmt.Errorf("failed to decrypt vault file: %w", err)
+		return fmt.Errorf("vault decryption failed: %w", err)
 	}
 
-	envMap, err := godotenv.Unmarshal(decrypted)
+	envMap, err := a.envLoader.Unmarshal(decrypted)
 	if err != nil {
-		return fmt.Errorf("failed to unmarshal decrypted vault file: %w", err)
+		return fmt.Errorf("environment unmarshaling failed: %w", err)
 	}
 
-	for key, value := range envMap {
-		os.Setenv(key, value)
+	for k, v := range envMap {
+		if err := os.Setenv(k, v); err != nil {
+			return fmt.Errorf("failed to set environment variable %s: %w", k, err)
+		}
 	}
 
 	return nil
 }
 
-func getJobsToRun(cfg *config.Config, jobName string) ([]config.Job, error) {
-	if jobName == "" {
-		return cfg.Jobs, nil
+func (a *App) loadConfig(path string) error {
+	cfg, err := config.LoadConfig(path)
+	if err != nil {
+		return err
 	}
-
-	for _, j := range cfg.Jobs {
-		if j.Name == jobName {
-			return []config.Job{j}, nil
-		}
-	}
-	return nil, fmt.Errorf("job '%s' not found in configuration", jobName)
+	a.config = cfg
+	return nil
 }
 
-func runJobs(cfg *config.Config, jobsToRun []config.Job) {
-	for _, target := range cfg.Targets {
+func (a *App) getJobsToRun(jobName string) ([]config.Job, error) {
+	if jobName == "" {
+		return a.config.Jobs, nil
+	}
 
+	for _, job := range a.config.Jobs {
+		if job.Name == jobName {
+			return []config.Job{job}, nil
+		}
+	}
+	return nil, fmt.Errorf("job '%s' not found", jobName)
+}
+
+func (a *App) executeJobs(jobs []config.Job) error {
+	for _, target := range a.config.Targets {
 		if target.Name == "" {
 			target.Name = target.Host
 		}
 
-		for _, j := range jobsToRun {
-			fmt.Printf("Running job '%s' on target '%s'\n", j.Name, target.Name)
-			if err := job.RunJob(target, j); err != nil {
-				fmt.Printf("Error running job '%s' on target '%s': %v\n", j.Name, target.Name, err)
-				continue
+		for _, job := range jobs {
+			fmt.Printf("Running job '%s' on target '%s'\n", job.Name, target.Name)
+			if err := a.jobRunner(target, job); err != nil {
+				return fmt.Errorf("job '%s' failed on target '%s': %w", job.Name, target.Name, err)
 			}
-			fmt.Printf("Job '%s' completed successfully on target '%s'\n", j.Name, target.Name)
+			fmt.Printf("Job '%s' completed successfully on target '%s'\n", job.Name, target.Name)
 		}
 	}
+	return nil
 }
 
 func promptVaultPassword() (string, error) {
 	fmt.Print("Enter vault password: ")
 
-	// Try secure password input first
-	password, err := term.ReadPassword(int(syscall.Stdin))
-	if err == nil {
+	if password, err := term.ReadPassword(int(syscall.Stdin)); err == nil {
 		fmt.Println()
 		return string(password), nil
 	}
 
-	// Fallback to standard input if terminal reading fails
 	reader := bufio.NewReader(os.Stdin)
-	password, err = reader.ReadBytes('\n')
+	password, err := reader.ReadBytes('\n')
 	if err != nil {
 		return "", fmt.Errorf("failed to read password: %w", err)
 	}
 
-	// Trim whitespace and newline
 	return strings.TrimSpace(string(password)), nil
 }
 
-func getVaultPassword(passwordFlag string, envPath string) (*string, error) {
+func resolveVaultPassword(passwordFlag string, envPath string) (*string, error) {
 	if passwordFlag != "" {
 		return &passwordFlag, nil
 	}
@@ -152,9 +182,29 @@ func getVaultPassword(passwordFlag string, envPath string) (*string, error) {
 		return new(string), nil
 	}
 
-	promptedPassword, err := promptVaultPassword()
+	password, err := promptVaultPassword()
 	if err != nil {
-		return nil, fmt.Errorf("error reading vault password: %w", err)
+		return nil, fmt.Errorf("password prompt failed: %w", err)
 	}
-	return &promptedPassword, nil
+	return &password, nil
+}
+
+func main() {
+	configPath := flag.String("config", "deploy.yaml", "Path to YAML configuration file")
+	jobName := flag.String("job", "", "Name of specific job to run")
+	envPath := flag.String("env", "", "Path to .env file")
+	vaultPassword := flag.String("vault-password", "", "Password for Ansible Vault file")
+	flag.Parse()
+
+	password, err := resolveVaultPassword(*vaultPassword, *envPath)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
+
+	app := NewApp()
+	if err := app.Run(*configPath, *jobName, *envPath, password); err != nil {
+		fmt.Printf("Error: %v\n", err)
+		os.Exit(1)
+	}
 }

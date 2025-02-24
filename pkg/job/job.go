@@ -14,18 +14,39 @@ import (
 	"ngdeploy/pkg/file"
 )
 
+type Runner func(target config.Target, job config.Job) error
+
+type Client interface {
+	ExecuteStep(step config.Step, stepNum, totalSteps int) error
+	Close()
+}
+
 type SSHClient struct {
 	sshClient  *ssh.Client
 	sftpClient *sftp.Client
 }
 
-func NewSSHClient(target config.Target) (*SSHClient, error) {
-	sshClient, sftpClient, err := connectToTarget(target)
-	if err != nil {
-		return nil, err
+func NewSSHClient(target config.Target) (Client, error) {
+	sshConfig := &ssh.ClientConfig{
+		User:            target.User,
+		Auth:            getAuthMethods(target),
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         5 * time.Second,
 	}
+
+	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", target.Host, getPort(target.Port)), sshConfig)
+	if err != nil {
+		return nil, fmt.Errorf("SSH connection failed: %w", err)
+	}
+
+	sftpClient, err := sftp.NewClient(client)
+	if err != nil {
+		client.Close()
+		return nil, fmt.Errorf("SFTP connection failed: %w", err)
+	}
+
 	return &SSHClient{
-		sshClient:  sshClient,
+		sshClient:  client,
 		sftpClient: sftpClient,
 	}, nil
 }
@@ -47,52 +68,39 @@ func RunJob(target config.Target, job config.Job) error {
 	defer client.Close()
 
 	for i, step := range job.Steps {
-		if err := executeStep(client, step, i+1, len(job.Steps)); err != nil {
+		if err := client.ExecuteStep(step, i+1, len(job.Steps)); err != nil {
 			return fmt.Errorf("step %d failed: %w", i+1, err)
 		}
 	}
 	return nil
 }
 
-func connectToTarget(target config.Target) (*ssh.Client, *sftp.Client, error) {
-	authMethods, err := getAuthMethods(target)
-	if err != nil {
-		return nil, nil, err
+func (c *SSHClient) ExecuteStep(step config.Step, stepNum, totalSteps int) error {
+	switch {
+	case step.Run != "":
+		return c.executeCommand(step, stepNum, totalSteps)
+	case step.Copy != nil:
+		return c.executeCopy(step.Copy, stepNum, totalSteps)
+	case step.Docker != nil:
+		return c.executeDocker(step, stepNum, totalSteps)
+	default:
+		return fmt.Errorf("invalid step configuration")
 	}
-
-	sshConfig := &ssh.ClientConfig{
-		User:            target.User,
-		Auth:            authMethods,
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         5 * time.Second,
-	}
-
-	port := getPort(target.Port)
-	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", target.Host, port), sshConfig)
-	if err != nil {
-		return nil, nil, fmt.Errorf("SSH connection failed: %w", err)
-	}
-
-	sftpClient, err := sftp.NewClient(client)
-	if err != nil {
-		client.Close()
-		return nil, nil, fmt.Errorf("SFTP connection failed: %w", err)
-	}
-
-	return client, sftpClient, nil
 }
 
-func getAuthMethods(target config.Target) ([]ssh.AuthMethod, error) {
+func getAuthMethods(target config.Target) []ssh.AuthMethod {
 	if target.PrivateKey != "" {
-		return getPrivateKeyAuth(target.PrivateKey)
+		if key, err := loadPrivateKey(target.PrivateKey); err == nil {
+			return []ssh.AuthMethod{key}
+		}
 	}
 	if target.Password != "" {
-		return []ssh.AuthMethod{ssh.Password(target.Password)}, nil
+		return []ssh.AuthMethod{ssh.Password(target.Password)}
 	}
-	return nil, fmt.Errorf("no authentication method provided for target %s", target.Name)
+	return nil
 }
 
-func getPrivateKeyAuth(keyPath string) ([]ssh.AuthMethod, error) {
+func loadPrivateKey(keyPath string) (ssh.AuthMethod, error) {
 	key, err := os.ReadFile(keyPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read private key: %w", err)
@@ -103,7 +111,7 @@ func getPrivateKeyAuth(keyPath string) ([]ssh.AuthMethod, error) {
 		return nil, fmt.Errorf("failed to parse private key: %w", err)
 	}
 
-	return []ssh.AuthMethod{ssh.PublicKeys(signer)}, nil
+	return ssh.PublicKeys(signer), nil
 }
 
 func getPort(port int) int {
@@ -113,33 +121,38 @@ func getPort(port int) int {
 	return port
 }
 
-func executeStep(client *SSHClient, step config.Step, stepNum, totalSteps int) error {
-	switch {
-	case step.Run != "":
-		return executeCommand(client.sshClient, step, stepNum, totalSteps)
-	case step.Copy != nil:
-		return executeCopy(client.sftpClient, step.Copy, stepNum, totalSteps)
-	case step.Docker != nil:
-		return executeDockerRun(client.sshClient, &step, stepNum, totalSteps)
-	default:
-		return fmt.Errorf("invalid step configuration")
-	}
-}
+func (c *SSHClient) executeCommand(step config.Step, stepNum, totalSteps int) error {
+	fmt.Printf("[%d/%d] Executing command...\n", stepNum, totalSteps)
 
-func executeDockerRun(client *ssh.Client, step *config.Step, stepNum, totalSteps int) error {
-	docker := step.Docker
-	fmt.Printf("[%d/%d] Running Docker container '%s'...\n", stepNum, totalSteps, docker.Name)
-
-	cmd := buildDockerCommand(docker)
-
-	session, err := client.NewSession()
+	session, err := c.sshClient.NewSession()
 	if err != nil {
 		return fmt.Errorf("failed to create SSH session: %w", err)
 	}
 	defer session.Close()
 
-	shell := getShell(step.Shell)
+	return runShellCommand(session, getShell(step.Shell), step.Run)
+}
 
+func (c *SSHClient) executeCopy(copyStep *config.CopyStep, stepNum, totalSteps int) error {
+	fmt.Printf("[%d/%d] Copying '%s' to '%s'...\n", stepNum, totalSteps, copyStep.Src, copyStep.Dst)
+	return file.CopyPath(c.sftpClient, copyStep.Src, copyStep.Dst, copyStep.Exclude)
+}
+
+func (c *SSHClient) executeDocker(step config.Step, stepNum, totalSteps int) error {
+	docker := step.Docker
+	fmt.Printf("[%d/%d] Running Docker container '%s'...\n", stepNum, totalSteps, docker.Name)
+
+	session, err := c.sshClient.NewSession()
+	if err != nil {
+		return fmt.Errorf("failed to create SSH session: %w", err)
+	}
+	defer session.Close()
+
+	commands := buildDockerCommands(docker)
+	return runShellCommand(session, getShell(step.Shell), strings.Join(commands, "\n"))
+}
+
+func buildDockerCommands(docker *config.DockerStep) []string {
 	commands := make([]string, 0)
 
 	if docker.Name != "" {
@@ -150,7 +163,7 @@ func executeDockerRun(client *ssh.Client, step *config.Step, stepNum, totalSteps
 		commands = append(commands, fmt.Sprintf("docker network create %s 2>/dev/null || true", network))
 	}
 
-	commands = append(commands, cmd)
+	commands = append(commands, buildDockerCreateCommand(docker))
 
 	for _, network := range docker.Networks {
 		commands = append(commands, fmt.Sprintf("docker network connect %s %s", network, docker.Name))
@@ -158,69 +171,76 @@ func executeDockerRun(client *ssh.Client, step *config.Step, stepNum, totalSteps
 
 	commands = append(commands, fmt.Sprintf("docker start %s", docker.Name))
 
-	return runCommand(session, shell, strings.Join(commands, "\n"))
+	return commands
 }
 
-func buildDockerCommand(docker *config.DockerStep) string {
-	var parts []string
-	parts = append(parts, "docker create")
+func buildDockerCreateCommand(docker *config.DockerStep) string {
+	args := []string{"docker create"}
 
 	if docker.Name != "" {
-		parts = append(parts, "--name", docker.Name)
+		args = append(args, "--name", docker.Name)
 	}
 
 	if docker.Restart != "" {
-		parts = append(parts, "--restart", docker.Restart)
+		args = append(args, "--restart", docker.Restart)
 	}
 
-	for key, value := range docker.Environment {
-		parts = append(parts, "-e", fmt.Sprintf("%s=\"%s\"", key, value))
+	for k, v := range docker.Environment {
+		args = append(args, "-e", fmt.Sprintf("%s=\"%s\"", k, v))
 	}
 
-	for _, port := range docker.Ports {
-		parts = append(parts, "-p", port)
-	}
+	args = append(args,
+		appendDockerArgs("-p", docker.Ports)...,
+	)
+	args = append(args,
+		appendDockerArgs("-v", docker.Volumes)...,
+	)
+	args = append(args,
+		appendDockerLabels("-l", docker.Labels)...,
+	)
+	args = append(args,
+		appendDockerNetworks("--network", docker.Networks)...,
+	)
 
-	for _, volume := range docker.Volumes {
-		parts = append(parts, "-v", volume)
-	}
+	args = append(args, docker.Image)
+	args = append(args, docker.Commands...)
 
-	for key, value := range docker.Labels {
-		parts = append(parts, "-l", fmt.Sprintf("%s=\"%s\"", key, value))
-	}
-
-	for _, network := range docker.Networks {
-		parts = append(parts, "--network", network)
-	}
-
-	parts = append(parts, docker.Image)
-
-	for _, command := range docker.Commands {
-		parts = append(parts, command)
-	}
-
-	return strings.Join(parts, " ")
+	return strings.Join(args, " ")
 }
 
-func executeCommand(client *ssh.Client, step config.Step, stepNum, totalSteps int) error {
-	fmt.Printf("[%d/%d] Executing command...\n", stepNum, totalSteps)
-
-	session, err := client.NewSession()
-	if err != nil {
-		return fmt.Errorf("failed to create SSH session: %w", err)
+func appendDockerArgs(flag string, values []string) []string {
+	args := make([]string, 0, len(values)*2)
+	for _, v := range values {
+		args = append(args, flag, v)
 	}
-	defer session.Close()
-
-	shell := getShell(step.Shell)
-	return runCommand(session, shell, step.Run)
+	return args
 }
 
-func executeCopy(client *sftp.Client, copyStep *config.CopyStep, stepNum, totalSteps int) error {
-	fmt.Printf("[%d/%d] Copying '%s' to '%s'...\n", stepNum, totalSteps, copyStep.Src, copyStep.Dst)
-	return file.CopyPath(client, copyStep.Src, copyStep.Dst, copyStep.Exclude)
+func appendDockerLabels(flag string, labels map[string]string) []string {
+	args := make([]string, 0, len(labels)*2)
+	for k, v := range labels {
+		args = append(args, flag, fmt.Sprintf("%s=\"%s\"", k, v))
+	}
+	return args
 }
 
-func runCommand(session *ssh.Session, shell, cmd string) error {
+func appendDockerNetworks(flag string, networks []string) []string {
+	args := make([]string, 0, len(networks)*2)
+	for _, n := range networks {
+		args = append(args, flag, n)
+	}
+	return args
+}
+
+func getShell(shell string) string {
+	if shell == "" {
+		return "sh"
+	}
+	return shell
+}
+
+func runShellCommand(session *ssh.Session, shell, cmd string) error {
+	fmt.Println(cmd)
 	stdout, err := session.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stdout pipe: %w", err)
@@ -231,30 +251,23 @@ func runCommand(session *ssh.Session, shell, cmd string) error {
 		return fmt.Errorf("failed to get stderr pipe: %w", err)
 	}
 
-	if err := session.Start(fmt.Sprintf("%s -c %s", shell, escapeCommand(cmd))); err != nil {
+	cmd = fmt.Sprintf("%s -c %s", shell, escapeCommand(cmd))
+	if err := session.Start(cmd); err != nil {
 		return fmt.Errorf("failed to start command: %w", err)
 	}
 
-	go printOutput(stdout, os.Stdout)
-	go printOutput(stderr, os.Stderr)
+	go pipeOutput(stdout, os.Stdout)
+	go pipeOutput(stderr, os.Stderr)
 
 	return session.Wait()
 }
 
-func getShell(shell string) string {
-	if shell == "" {
-		return "sh"
-	}
-	return shell
-}
-
 func escapeCommand(cmd string) string {
 	cmd = "'" + strings.Replace(cmd, "'", "'\\''", -1) + "'"
-	cmd = strings.Replace(cmd, "`", "\\`", -1)
-	return cmd
+	return strings.Replace(cmd, "`", "\\`", -1)
 }
 
-func printOutput(r io.Reader, w io.Writer) {
+func pipeOutput(r io.Reader, w io.Writer) {
 	scanner := bufio.NewScanner(r)
 	for scanner.Scan() {
 		fmt.Fprintln(w, scanner.Text())
