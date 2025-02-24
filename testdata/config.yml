@@ -1,0 +1,10 @@
+targets:
+  - name: test-server
+    host: localhost
+    user: testuser
+    password: testpass
+
+jobs:
+  - name: test-job
+    steps:
+      - run: echo "test"

@@ -78,6 +78,9 @@ func (a *App) loadEnvironment(envPath string, vaultPassword *string) error {
 	}
 
 	if strings.HasSuffix(envPath, ".vault") {
+		if vaultPassword == nil {
+			return fmt.Errorf("vault password is required")
+		}
 		return a.loadVaultFile(envPath, *vaultPassword)
 	}
 
