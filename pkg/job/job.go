@@ -119,9 +119,87 @@ func executeStep(client *SSHClient, step config.Step, stepNum, totalSteps int) e
 		return executeCommand(client.sshClient, step, stepNum, totalSteps)
 	case step.Copy != nil:
 		return executeCopy(client.sftpClient, step.Copy, stepNum, totalSteps)
+	case step.Docker != nil:
+		return executeDockerRun(client.sshClient, &step, stepNum, totalSteps)
 	default:
 		return fmt.Errorf("invalid step configuration")
 	}
+}
+
+func executeDockerRun(client *ssh.Client, step *config.Step, stepNum, totalSteps int) error {
+	docker := step.Docker
+	fmt.Printf("[%d/%d] Running Docker container '%s'...\n", stepNum, totalSteps, docker.Name)
+
+	cmd := buildDockerCommand(docker)
+
+	session, err := client.NewSession()
+	if err != nil {
+		return fmt.Errorf("failed to create SSH session: %w", err)
+	}
+	defer session.Close()
+
+	shell := getShell(step.Shell)
+
+	commands := make([]string, 0)
+
+	if docker.Name != "" {
+		commands = append(commands, fmt.Sprintf("docker rm -f %s 2>/dev/null || true", docker.Name))
+	}
+
+	for _, network := range docker.Networks {
+		commands = append(commands, fmt.Sprintf("docker network create %s 2>/dev/null || true", network))
+	}
+
+	commands = append(commands, cmd)
+
+	for _, network := range docker.Networks {
+		commands = append(commands, fmt.Sprintf("docker network connect %s %s", network, docker.Name))
+	}
+
+	commands = append(commands, fmt.Sprintf("docker start %s", docker.Name))
+
+	return runCommand(session, shell, strings.Join(commands, "\n"))
+}
+
+func buildDockerCommand(docker *config.DockerStep) string {
+	var parts []string
+	parts = append(parts, "docker create")
+
+	if docker.Name != "" {
+		parts = append(parts, "--name", docker.Name)
+	}
+
+	if docker.Restart != "" {
+		parts = append(parts, "--restart", docker.Restart)
+	}
+
+	for key, value := range docker.Environment {
+		parts = append(parts, "-e", fmt.Sprintf("%s=\"%s\"", key, value))
+	}
+
+	for _, port := range docker.Ports {
+		parts = append(parts, "-p", port)
+	}
+
+	for _, volume := range docker.Volumes {
+		parts = append(parts, "-v", volume)
+	}
+
+	for key, value := range docker.Labels {
+		parts = append(parts, "-l", fmt.Sprintf("%s=\"%s\"", key, value))
+	}
+
+	for _, network := range docker.Networks {
+		parts = append(parts, "--network", network)
+	}
+
+	parts = append(parts, docker.Image)
+
+	for _, command := range docker.Commands {
+		parts = append(parts, command)
+	}
+
+	return strings.Join(parts, " ")
 }
 
 func executeCommand(client *ssh.Client, step config.Step, stepNum, totalSteps int) error {
@@ -171,7 +249,9 @@ func getShell(shell string) string {
 }
 
 func escapeCommand(cmd string) string {
-	return "'" + strings.Replace(cmd, "'", "'\\''", -1) + "'"
+	cmd = "'" + strings.Replace(cmd, "'", "'\\''", -1) + "'"
+	cmd = strings.Replace(cmd, "`", "\\`", -1)
+	return cmd
 }
 
 func printOutput(r io.Reader, w io.Writer) {

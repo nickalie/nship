@@ -28,9 +28,22 @@ type Job struct {
 }
 
 type Step struct {
-	Run   string    `yaml:"run,omitempty"`
-	Copy  *CopyStep `yaml:"copy,omitempty"`
-	Shell string    `yaml:"shell,omitempty"`
+	Run    string      `yaml:"run,omitempty"`
+	Copy   *CopyStep   `yaml:"copy,omitempty"`
+	Shell  string      `yaml:"shell,omitempty"`
+	Docker *DockerStep `yaml:"docker,omitempty"`
+}
+
+type DockerStep struct {
+	Image       string            `yaml:"image"`
+	Name        string            `yaml:"name"`
+	Environment map[string]string `yaml:"environment"`
+	Ports       []string          `yaml:"ports"`
+	Volumes     []string          `yaml:"volumes"`
+	Labels      map[string]string `yaml:"labels"`
+	Networks    []string          `yaml:"networks"`
+	Commands    []string          `yaml:"commands"`
+	Restart     string            `yaml:"restart"`
 }
 
 type CopyStep struct {
