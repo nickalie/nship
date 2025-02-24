@@ -102,6 +102,11 @@ func getJobsToRun(cfg *config.Config, jobName string) ([]config.Job, error) {
 
 func runJobs(cfg *config.Config, jobsToRun []config.Job) {
 	for _, target := range cfg.Targets {
+
+		if target.Name == "" {
+			target.Name = target.Host
+		}
+
 		for _, j := range jobsToRun {
 			fmt.Printf("Running job '%s' on target '%s'\n", j.Name, target.Name)
 			if err := job.RunJob(target, j); err != nil {

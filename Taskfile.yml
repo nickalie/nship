@@ -5,3 +5,4 @@ tasks:
     dir: cmd
     cmds:
       - go build -o ../bin/ngdeploy.exe
+      - npx shx cp ../bin/ngdeploy.exe D:/develop/tools/go/path/bin

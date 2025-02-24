@@ -30,17 +30,10 @@ type Job struct {
 type Step struct {
 	Run   string    `yaml:"run,omitempty"`
 	Copy  *CopyStep `yaml:"copy,omitempty"`
-	Sync  *SyncStep `yaml:"sync,omitempty"`
 	Shell string    `yaml:"shell,omitempty"`
 }
 
 type CopyStep struct {
-	Src     string   `yaml:"src"`
-	Dst     string   `yaml:"dst"`
-	Exclude []string `yaml:"exclude,omitempty"`
-}
-
-type SyncStep struct {
 	Src     string   `yaml:"src"`
 	Dst     string   `yaml:"dst"`
 	Exclude []string `yaml:"exclude,omitempty"`

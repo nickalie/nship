@@ -78,6 +78,10 @@ func CopyDir(client *sftp.Client, src, dst string, exclude []string) error {
 			continue
 		}
 
+		if ok, _ := shouldTransferFile(client, srcPath, dstPath); !ok {
+			continue
+		}
+
 		if entry.IsDir() {
 			err = CopyDir(client, srcPath, dstPath, exclude)
 			if err != nil {
@@ -102,4 +106,30 @@ func isExcluded(path string, exclude []string) bool {
 		}
 	}
 	return false
+}
+
+func shouldTransferFile(client *sftp.Client, localPath, remotePath string) (bool, error) {
+	localInfo, err := os.Stat(localPath)
+
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to stat local file: %w", err)
+	}
+
+	remoteInfo, err := client.Stat(remotePath)
+
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("failed to stat remote file: %w", err)
+	}
+
+	if localInfo.Size() != remoteInfo.Size() {
+		return true, nil
+	}
+
+	return false, err
 }
