@@ -5,69 +5,98 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-
-	"github.com/pkg/sftp"
 )
 
-func CopyPath(client *sftp.Client, src, dst string, exclude []string) error {
-	srcInfo, err := os.Stat(src)
+// FileSystem abstracts OS file operations
+type FileSystem interface {
+	Stat(name string) (os.FileInfo, error)
+	Open(name string) (io.ReadCloser, error)
+	ReadDir(name string) ([]os.DirEntry, error)
+}
+
+// SFTPClient abstracts SFTP operations
+type SFTPClient interface {
+	Create(path string) (io.WriteCloser, error)
+	MkdirAll(path string) error
+	Chmod(path string, mode os.FileMode) error
+	Stat(path string) (os.FileInfo, error)
+}
+
+// DefaultFileSystem implements FileSystem using OS calls
+type DefaultFileSystem struct{}
+
+func (fs *DefaultFileSystem) Stat(name string) (os.FileInfo, error)      { return os.Stat(name) }
+func (fs *DefaultFileSystem) Open(name string) (io.ReadCloser, error)    { return os.Open(name) }
+func (fs *DefaultFileSystem) ReadDir(name string) ([]os.DirEntry, error) { return os.ReadDir(name) }
+
+// Copier handles file copy operations
+type Copier struct {
+	fs     FileSystem
+	client SFTPClient
+}
+
+// NewCopier creates a new Copier instance
+func NewCopier(fs FileSystem, client SFTPClient) *Copier {
+	return &Copier{fs: fs, client: client}
+}
+
+// CopyPath copies a file or directory
+func (c *Copier) CopyPath(src, dst string, exclude []string) error {
+	srcInfo, err := c.fs.Stat(src)
 	if err != nil {
-		return fmt.Errorf("failed to stat source: %w", err)
+		return fmt.Errorf("stat source: %w", err)
 	}
 
 	if srcInfo.IsDir() {
-		return CopyDir(client, src, dst, exclude)
+		return c.CopyDir(src, dst, exclude)
 	}
-
-	return CopyFile(client, src, dst)
+	return c.CopyFile(src, dst)
 }
 
-func CopyFile(client *sftp.Client, src, dst string) error {
-	srcFile, err := os.Open(src)
+// CopyFile copies a single file
+func (c *Copier) CopyFile(src, dst string) error {
+	srcFile, err := c.fs.Open(src)
 	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
+		return fmt.Errorf("open source file: %w", err)
 	}
 	defer srcFile.Close()
 
 	dstDir := filepath.ToSlash(filepath.Dir(dst))
-	err = client.MkdirAll(dstDir)
-	if err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
+	if err := c.client.MkdirAll(dstDir); err != nil {
+		return fmt.Errorf("create destination directory: %w", err)
 	}
 
-	dstFile, err := client.Create(dst)
+	dstFile, err := c.client.Create(dst)
 	if err != nil {
-		return fmt.Errorf("failed to create destination file: %w", err)
+		return fmt.Errorf("create destination file: %w", err)
 	}
 	defer dstFile.Close()
 
-	_, err = io.Copy(dstFile, srcFile)
-	if err != nil {
-		return fmt.Errorf("failed to copy file content: %w", err)
+	if _, err := io.Copy(dstFile, srcFile); err != nil {
+		return fmt.Errorf("copy file content: %w", err)
 	}
 
-	srcInfo, err := os.Stat(src)
+	srcInfo, err := c.fs.Stat(src)
 	if err != nil {
-		return fmt.Errorf("failed to stat source file: %w", err)
+		return fmt.Errorf("stat source file: %w", err)
 	}
 
-	err = client.Chmod(dst, srcInfo.Mode())
-	if err != nil {
-		return fmt.Errorf("failed to set file permissions: %w", err)
+	if err := c.client.Chmod(dst, srcInfo.Mode()); err != nil {
+		return fmt.Errorf("set file permissions: %w", err)
 	}
 
 	return nil
 }
 
-func CopyDir(client *sftp.Client, src, dst string, exclude []string) error {
-	err := client.MkdirAll(dst)
-	if err != nil {
-		return fmt.Errorf("failed to create destination directory: %w", err)
+// CopyDir copies a directory recursively
+func (c *Copier) CopyDir(src, dst string, exclude []string) error {
+	if err := c.client.MkdirAll(dst); err != nil {
+		return fmt.Errorf("create destination directory: %w", err)
 	}
 
-	entries, err := os.ReadDir(src)
+	entries, err := c.fs.ReadDir(src)
 	if err != nil {
-		return fmt.Errorf("failed to read source directory: %w", err)
+		return fmt.Errorf("read source directory: %w", err)
 	}
 
 	for _, entry := range entries {
@@ -78,58 +107,51 @@ func CopyDir(client *sftp.Client, src, dst string, exclude []string) error {
 			continue
 		}
 
-		if ok, _ := shouldTransferFile(client, srcPath, dstPath); !ok {
+		if ok, err := c.shouldTransferFile(srcPath, dstPath); err != nil {
+			return fmt.Errorf("check file transfer: %w", err)
+		} else if !ok {
 			continue
 		}
 
 		if entry.IsDir() {
-			err = CopyDir(client, srcPath, dstPath, exclude)
-			if err != nil {
+			if err := c.CopyDir(srcPath, dstPath, exclude); err != nil {
 				return err
 			}
 		} else {
-			err = CopyFile(client, srcPath, dstPath)
-			if err != nil {
+			if err := c.CopyFile(srcPath, dstPath); err != nil {
 				return err
 			}
 		}
 	}
-
 	return nil
 }
 
+func (c *Copier) shouldTransferFile(localPath, remotePath string) (bool, error) {
+	localInfo, err := c.fs.Stat(localPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("stat local file: %w", err)
+	}
+
+	remoteInfo, err := c.client.Stat(remotePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return true, nil
+		}
+		return false, fmt.Errorf("stat remote file: %w", err)
+	}
+
+	return localInfo.Size() != remoteInfo.Size(), nil
+}
+
+// isExcluded checks if a path matches any exclude pattern
 func isExcluded(path string, exclude []string) bool {
 	for _, pattern := range exclude {
-		matched, _ := filepath.Match(pattern, path)
-		if matched {
+		if matched, _ := filepath.Match(pattern, path); matched {
 			return true
 		}
 	}
 	return false
-}
-
-func shouldTransferFile(client *sftp.Client, localPath, remotePath string) (bool, error) {
-	localInfo, err := os.Stat(localPath)
-
-	if err != nil {
-		if os.IsNotExist(err) {
-			return true, nil
-		}
-		return false, fmt.Errorf("failed to stat local file: %w", err)
-	}
-
-	remoteInfo, err := client.Stat(remotePath)
-
-	if err != nil {
-		if os.IsNotExist(err) {
-			return true, nil
-		}
-		return false, fmt.Errorf("failed to stat remote file: %w", err)
-	}
-
-	if localInfo.Size() != remoteInfo.Size() {
-		return true, nil
-	}
-
-	return false, err
 }

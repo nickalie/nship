@@ -14,6 +14,25 @@ import (
 	"ngdeploy/pkg/file"
 )
 
+// SFTPAdapter adapts sftp.Client to our SFTPClient interface
+type SFTPAdapter struct {
+	*sftp.Client
+}
+
+func NewSFTPAdapter(client *sftp.Client) *SFTPAdapter {
+	return &SFTPAdapter{Client: client}
+}
+
+// Create implements SFTPClient interface
+func (a *SFTPAdapter) Create(path string) (io.WriteCloser, error) {
+	return a.Client.Create(path)
+}
+
+// MkdirAll implements SFTPClient interface
+func (a *SFTPAdapter) MkdirAll(path string) error {
+	return a.Client.MkdirAll(path)
+}
+
 type Runner func(target config.Target, job config.Job) error
 
 type Client interface {
@@ -24,6 +43,7 @@ type Client interface {
 type SSHClient struct {
 	sshClient  *ssh.Client
 	sftpClient *sftp.Client
+	copier     *file.Copier
 }
 
 func NewSSHClient(target config.Target) (Client, error) {
@@ -45,9 +65,13 @@ func NewSSHClient(target config.Target) (Client, error) {
 		return nil, fmt.Errorf("SFTP connection failed: %w", err)
 	}
 
+	// Create Copier with default filesystem and SFTP adapter
+	copier := file.NewCopier(&file.DefaultFileSystem{}, NewSFTPAdapter(sftpClient))
+
 	return &SSHClient{
 		sshClient:  client,
 		sftpClient: sftpClient,
+		copier:     copier,
 	}, nil
 }
 
@@ -135,7 +159,7 @@ func (c *SSHClient) executeCommand(step config.Step, stepNum, totalSteps int) er
 
 func (c *SSHClient) executeCopy(copyStep *config.CopyStep, stepNum, totalSteps int) error {
 	fmt.Printf("[%d/%d] Copying '%s' to '%s'...\n", stepNum, totalSteps, copyStep.Src, copyStep.Dst)
-	return file.CopyPath(c.sftpClient, copyStep.Src, copyStep.Dst, copyStep.Exclude)
+	return c.copier.CopyPath(copyStep.Src, copyStep.Dst, copyStep.Exclude)
 }
 
 func (c *SSHClient) executeDocker(step config.Step, stepNum, totalSteps int) error {
