@@ -171,6 +171,19 @@ func TestCopyFile(t *testing.T) {
 				sftp.createErr = errors.New("create error")
 			},
 		},
+		{
+			name: "copy file content error",
+			src:  "/src/file.txt",
+			dst:  "/dst/file.txt",
+			srcFile: &mockFile{
+				content: "test content",
+				mode:    0644,
+			},
+			wantErr: true,
+			setupMock: func(fs *mockFileSystem, sftp *mockSFTPClient) {
+				sftp.createErr = errors.New("copy file content error")
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -237,6 +250,232 @@ func TestIsExcluded(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := isExcluded(tt.path, tt.exclude); got != tt.expected {
 				t.Errorf("isExcluded() = %v, want %v", got, tt.expected)
+			}
+		})
+	}
+}
+
+func TestCopyPath(t *testing.T) {
+	tests := []struct {
+		name      string
+		src       string
+		dst       string
+		srcFile   *mockFile
+		exclude   []string
+		wantErr   bool
+		setupMock func(*mockFileSystem, *mockSFTPClient)
+	}{
+		{
+			name: "copy file successfully",
+			src:  "/src/file.txt",
+			dst:  "/dst/file.txt",
+			srcFile: &mockFile{
+				content: "test content",
+				mode:    0644,
+				size:    12,
+				isDir:   false,
+			},
+			wantErr: false,
+		},
+		{
+			name: "copy directory successfully",
+			src:  "/src/dir",
+			dst:  "/dst/dir",
+			srcFile: &mockFile{
+				mode:  0755,
+				isDir: true,
+			},
+			wantErr: false,
+		},
+		{
+			name:    "source not found",
+			src:     "/src/nonexistent",
+			dst:     "/dst/nonexistent",
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := &mockFileSystem{
+				files: make(map[string]*mockFile),
+			}
+			sftp := &mockSFTPClient{
+				files: make(map[string]*mockFile),
+			}
+
+			if tt.srcFile != nil {
+				fs.files[tt.src] = tt.srcFile
+			}
+
+			if tt.setupMock != nil {
+				tt.setupMock(fs, sftp)
+			}
+
+			copier := NewCopier(fs, sftp)
+			err := copier.CopyPath(tt.src, tt.dst, tt.exclude)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CopyPath() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestShouldTransferFile(t *testing.T) {
+	tests := []struct {
+		name       string
+		local      string
+		remote     string
+		localFile  *mockFile
+		remoteFile *mockFile
+		want       bool
+		wantErr    bool
+		setupMock  func(*mockFileSystem, *mockSFTPClient)
+	}{
+		{
+			name:   "different sizes",
+			local:  "/src/file.txt",
+			remote: "/dst/file.txt",
+			localFile: &mockFile{
+				content: "content1",
+				size:    8,
+			},
+			remoteFile: &mockFile{
+				content: "different",
+				size:    9,
+			},
+			want:    true,
+			wantErr: false,
+		},
+		{
+			name:   "same sizes",
+			local:  "/src/file.txt",
+			remote: "/dst/file.txt",
+			localFile: &mockFile{
+				content: "content",
+				size:    7,
+			},
+			remoteFile: &mockFile{
+				content: "content",
+				size:    7,
+			},
+			want:    false,
+			wantErr: false,
+		},
+		{
+			name:    "local stat error",
+			local:   "/src/file.txt",
+			remote:  "/dst/file.txt",
+			wantErr: true,
+			setupMock: func(fs *mockFileSystem, sftp *mockSFTPClient) {
+				fs.statErr = errors.New("stat error")
+			},
+		},
+		{
+			name:   "remote stat error",
+			local:  "/src/file.txt",
+			remote: "/dst/file.txt",
+			localFile: &mockFile{
+				content: "content",
+				size:    7,
+			},
+			wantErr: true,
+			setupMock: func(fs *mockFileSystem, sftp *mockSFTPClient) {
+				sftp.statErr = errors.New("stat error")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := &mockFileSystem{
+				files: make(map[string]*mockFile),
+			}
+			sftp := &mockSFTPClient{
+				files: make(map[string]*mockFile),
+			}
+
+			if tt.localFile != nil {
+				fs.files[tt.local] = tt.localFile
+			}
+			if tt.remoteFile != nil {
+				sftp.files[tt.remote] = tt.remoteFile
+			}
+
+			if tt.setupMock != nil {
+				tt.setupMock(fs, sftp)
+			}
+
+			copier := NewCopier(fs, sftp)
+			got, err := copier.shouldTransferFile(tt.local, tt.remote)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("shouldTransferFile() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if err == nil && got != tt.want {
+				t.Errorf("shouldTransferFile() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestCopyDir(t *testing.T) {
+	tests := []struct {
+		name      string
+		src       string
+		dst       string
+		srcFiles  map[string]*mockFile
+		wantErr   bool
+		setupMock func(*mockFileSystem, *mockSFTPClient)
+	}{
+		{
+			name: "copy directory successfully",
+			src:  "/src/dir",
+			dst:  "/dst/dir",
+			srcFiles: map[string]*mockFile{
+				"/src/dir/file1.txt": {content: "content1", mode: 0644, size: 8, isDir: false},
+				"/src/dir/file2.txt": {content: "content2", mode: 0644, size: 8, isDir: false},
+			},
+			wantErr: false,
+		},
+		{
+			name: "create destination directory error",
+			src:  "/src/dir",
+			dst:  "/dst/dir",
+			srcFiles: map[string]*mockFile{
+				"/src/dir/file1.txt": {content: "content1", mode: 0644, size: 8, isDir: false},
+			},
+			wantErr: true,
+			setupMock: func(fs *mockFileSystem, sftp *mockSFTPClient) {
+				sftp.mkdirErr = errors.New("mkdir error")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := &mockFileSystem{
+				files: make(map[string]*mockFile),
+			}
+			sftp := &mockSFTPClient{
+				files: make(map[string]*mockFile),
+			}
+
+			for path, file := range tt.srcFiles {
+				fs.files[path] = file
+			}
+
+			if tt.setupMock != nil {
+				tt.setupMock(fs, sftp)
+			}
+
+			copier := NewCopier(fs, sftp)
+			err := copier.CopyDir(tt.src, tt.dst, nil)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("CopyDir() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
