@@ -1,4 +1,4 @@
-module ngdeploy
+module github.com/nickalie/ngdeploy
 
 go 1.23
 

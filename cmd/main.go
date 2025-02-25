@@ -5,14 +5,15 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"syscall"
 
 	"github.com/joho/godotenv"
+	"github.com/nickalie/ngdeploy/config"
+	"github.com/nickalie/ngdeploy/pkg/job"
 	"github.com/sosedoff/ansible-vault-go"
 	"golang.org/x/term"
-	"ngdeploy/config"
-	"ngdeploy/pkg/job"
 )
 
 type godotenvWrapper struct{}
@@ -125,27 +126,32 @@ func (a *App) loadConfig(path string) error {
 	return nil
 }
 
-func (a *App) getJobsToRun(jobName string) ([]config.Job, error) {
+func (a *App) getJobsToRun(jobName string) ([]*config.Job, error) {
 	if jobName == "" {
 		return a.config.Jobs, nil
 	}
 
 	for _, job := range a.config.Jobs {
 		if job.Name == jobName {
-			return []config.Job{job}, nil
+			return []*config.Job{job}, nil
 		}
 	}
 	return nil, fmt.Errorf("job '%s' not found", jobName)
 }
 
-func (a *App) executeJobs(jobs []config.Job) error {
+func (a *App) executeJobs(jobs []*config.Job) error {
 	for _, target := range a.config.Targets {
 		if target.Name == "" {
 			target.Name = target.Host
 		}
 
-		for _, job := range jobs {
+		for index, job := range jobs {
+			if job.Name == "" {
+				job.Name = strconv.Itoa(index + 1)
+			}
+
 			fmt.Printf("Running job '%s' on target '%s'\n", job.Name, target.Name)
+
 			if err := a.jobRunner(target, job); err != nil {
 				return fmt.Errorf("job '%s' failed on target '%s': %w", job.Name, target.Name, err)
 			}

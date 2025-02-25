@@ -8,10 +8,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nickalie/ngdeploy/config"
+	"github.com/nickalie/ngdeploy/pkg/file"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
-	"ngdeploy/config"
-	"ngdeploy/pkg/file"
 )
 
 // SFTPAdapter adapts sftp.Client to our SFTPClient interface
@@ -33,10 +33,10 @@ func (a *SFTPAdapter) MkdirAll(path string) error {
 	return a.Client.MkdirAll(path)
 }
 
-type Runner func(target config.Target, job config.Job) error
+type Runner func(target *config.Target, job *config.Job) error
 
 type Client interface {
-	ExecuteStep(step config.Step, stepNum, totalSteps int) error
+	ExecuteStep(step *config.Step, stepNum, totalSteps int) error
 	Close()
 }
 
@@ -46,7 +46,7 @@ type SSHClient struct {
 	copier     *file.Copier
 }
 
-func NewSSHClient(target config.Target) (Client, error) {
+func NewSSHClient(target *config.Target) (Client, error) {
 	sshConfig := &ssh.ClientConfig{
 		User:            target.User,
 		Auth:            getAuthMethods(target),
@@ -84,7 +84,7 @@ func (c *SSHClient) Close() {
 	}
 }
 
-func RunJob(target config.Target, job config.Job) error {
+func RunJob(target *config.Target, job *config.Job) error {
 	client, err := NewSSHClient(target)
 	if err != nil {
 		return fmt.Errorf("failed to create SSH client: %w", err)
@@ -99,7 +99,7 @@ func RunJob(target config.Target, job config.Job) error {
 	return nil
 }
 
-func (c *SSHClient) ExecuteStep(step config.Step, stepNum, totalSteps int) error {
+func (c *SSHClient) ExecuteStep(step *config.Step, stepNum, totalSteps int) error {
 	switch {
 	case step.Run != "":
 		return c.executeCommand(step, stepNum, totalSteps)
@@ -112,7 +112,7 @@ func (c *SSHClient) ExecuteStep(step config.Step, stepNum, totalSteps int) error
 	}
 }
 
-func getAuthMethods(target config.Target) []ssh.AuthMethod {
+func getAuthMethods(target *config.Target) []ssh.AuthMethod {
 	if target.PrivateKey != "" {
 		if key, err := loadPrivateKey(target.PrivateKey); err == nil {
 			return []ssh.AuthMethod{key}
@@ -145,7 +145,7 @@ func getPort(port int) int {
 	return port
 }
 
-func (c *SSHClient) executeCommand(step config.Step, stepNum, totalSteps int) error {
+func (c *SSHClient) executeCommand(step *config.Step, stepNum, totalSteps int) error {
 	fmt.Printf("[%d/%d] Executing command...\n", stepNum, totalSteps)
 
 	session, err := c.sshClient.NewSession()
@@ -162,7 +162,7 @@ func (c *SSHClient) executeCopy(copyStep *config.CopyStep, stepNum, totalSteps i
 	return c.copier.CopyPath(copyStep.Src, copyStep.Dst, copyStep.Exclude)
 }
 
-func (c *SSHClient) executeDocker(step config.Step, stepNum, totalSteps int) error {
+func (c *SSHClient) executeDocker(step *config.Step, stepNum, totalSteps int) error {
 	docker := step.Docker
 	fmt.Printf("[%d/%d] Running Docker container '%s'...\n", stepNum, totalSteps, docker.Name)
 

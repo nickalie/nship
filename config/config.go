@@ -15,12 +15,12 @@ import (
 )
 
 type Config struct {
-	Targets []Target `yaml:"targets" json:"targets" validate:"required,dive"`
-	Jobs    []Job    `yaml:"jobs" json:"jobs" validate:"required,dive"`
+	Targets []*Target `yaml:"targets" json:"targets" validate:"required,dive"`
+	Jobs    []*Job    `yaml:"jobs" json:"jobs" validate:"required,dive"`
 }
 
 type Target struct {
-	Name       string `yaml:"name" json:"name" validate:"required"`
+	Name       string `yaml:"name" json:"name" validate:"omitempty"`
 	Host       string `yaml:"host" json:"host" validate:"required,hostname|ip"`
 	User       string `yaml:"user" json:"user" validate:"required"`
 	Password   string `yaml:"password" json:"password" validate:"required_without=PrivateKey"`
@@ -29,14 +29,14 @@ type Target struct {
 }
 
 type Job struct {
-	Name  string `yaml:"name" json:"name" validate:"required"`
-	Steps []Step `yaml:"steps" json:"steps" validate:"required,dive"`
+	Name  string  `yaml:"name,omitempty" json:"name,omitempty" validate:"omitempty"`
+	Steps []*Step `yaml:"steps" json:"steps" validate:"required,dive"`
 }
 
 type Step struct {
 	Run    string      `yaml:"run,omitempty" json:"run,omitempty" validate:"required_without_all=Copy Shell Docker"`
 	Copy   *CopyStep   `yaml:"copy,omitempty" json:"copy,omitempty" validate:"required_without_all=Run Shell Docker"`
-	Shell  string      `yaml:"shell,omitempty" json:"shell,omitempty" validate:"required_without_all=Run Copy Docker"`
+	Shell  string      `yaml:"shell,omitempty" json:"shell,omitempty"`
 	Docker *DockerStep `yaml:"docker,omitempty" json:"docker,omitempty" validate:"required_without_all=Run Copy Shell"`
 }
 
@@ -101,12 +101,13 @@ func formatValidationErrors(errors validator.ValidationErrors) string {
 	var errMsgs []string
 	for _, err := range errors {
 		errMsgs = append(errMsgs, fmt.Sprintf(
-			"Field '%s' failed validation: %s",
+			"Field '%s' failed validation: %s (condition: %s)",
 			err.Field(),
 			err.Tag(),
+			err.Param(),
 		))
 	}
-	return strings.Join(errMsgs, "; ")
+	return strings.Join(errMsgs, "\n")
 }
 
 // loadYAMLConfig loads configuration from YAML file
@@ -174,6 +175,10 @@ func loadCmdConfig(dir string, args ...string) (*Config, error) {
 	}
 
 	parts := strings.Split(string(output), "\n")
+
+	if len(parts) < 2 {
+		return nil, fmt.Errorf("invalid output config cmd output")
+	}
 
 	outputStr := parts[len(parts)-2]
 
