@@ -1,3 +1,6 @@
+// Package config provides functionality for creating and managing deployment configurations.
+// It defines structures and methods for handling deployment targets, jobs, and steps,
+// supporting both local and remote operations through various protocols including SSH and SFTP.
 package config
 
 import (
@@ -14,11 +17,14 @@ import (
 	"strings"
 )
 
+// Config represents the main deployment configuration structure containing
+// targets and jobs definitions.
 type Config struct {
 	Targets []*Target `yaml:"targets" json:"targets" validate:"required,dive"`
 	Jobs    []*Job    `yaml:"jobs" json:"jobs" validate:"required,dive"`
 }
 
+// Target defines a deployment destination with connection details.
 type Target struct {
 	Name       string `yaml:"name" json:"name" validate:"omitempty"`
 	Host       string `yaml:"host" json:"host" validate:"required,hostname|ip"`
@@ -28,11 +34,14 @@ type Target struct {
 	Port       int    `yaml:"port,omitempty" json:"port,omitempty" validate:"omitempty,min=1,max=65535"`
 }
 
+// Job represents a collection of steps to be executed on targets.
 type Job struct {
 	Name  string  `yaml:"name,omitempty" json:"name,omitempty" validate:"omitempty"`
 	Steps []*Step `yaml:"steps" json:"steps" validate:"required,dive"`
 }
 
+// Step defines a single deployment action that can be either
+// a command execution, file copy operation, or Docker operation.
 type Step struct {
 	Run    string      `yaml:"run,omitempty" json:"run,omitempty" validate:"required_without_all=Copy Shell Docker"`
 	Copy   *CopyStep   `yaml:"copy,omitempty" json:"copy,omitempty" validate:"required_without_all=Run Shell Docker"`
@@ -40,6 +49,7 @@ type Step struct {
 	Docker *DockerStep `yaml:"docker,omitempty" json:"docker,omitempty" validate:"required_without_all=Run Copy Shell"`
 }
 
+// DockerStep defines Docker container configuration and execution parameters.
 type DockerStep struct {
 	Image       string            `yaml:"image" json:"image" validate:"required"`
 	Name        string            `yaml:"name" json:"name" validate:"required"`
@@ -52,6 +62,7 @@ type DockerStep struct {
 	Restart     string            `yaml:"restart" json:"restart" validate:"omitempty,oneof=no on-failure always unless-stopped"`
 }
 
+// CopyStep defines source and destination paths for file copy operations.
 type CopyStep struct {
 	Src     string   `yaml:"src" json:"src" validate:"required"`
 	Dst     string   `yaml:"dst" json:"dst" validate:"required"`
@@ -60,6 +71,7 @@ type CopyStep struct {
 
 var validate = validator.New()
 
+// LoadConfig loads and validates configuration from the specified path.
 func LoadConfig(configPath string) (*Config, error) {
 	config, err := loadConfigByExtension(configPath)
 	if err != nil {

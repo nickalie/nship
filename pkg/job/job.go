@@ -1,3 +1,6 @@
+// Package job provides functionality for executing deployment jobs on remote targets.
+// It implements SSH-based deployment operations including command execution,
+// file copying via SFTP, and Docker container management on remote hosts.
 package job
 
 import (
@@ -19,6 +22,7 @@ type SFTPAdapter struct {
 	*sftp.Client
 }
 
+// NewSFTPAdapter creates a new SFTPAdapter instance wrapping the provided sftp.Client
 func NewSFTPAdapter(client *sftp.Client) *SFTPAdapter {
 	return &SFTPAdapter{Client: client}
 }
@@ -33,19 +37,25 @@ func (a *SFTPAdapter) MkdirAll(path string) error {
 	return a.Client.MkdirAll(path)
 }
 
+// Runner defines a function type for executing jobs on targets
 type Runner func(target *config.Target, job *config.Job) error
 
+// Client defines the interface for executing deployment steps
 type Client interface {
+	// ExecuteStep executes a single step with progress information
 	ExecuteStep(step *config.Step, stepNum, totalSteps int) error
+	// Close releases all resources associated with the client
 	Close()
 }
 
+// SSHClient implements the Client interface using SSH connections
 type SSHClient struct {
 	sshClient  *ssh.Client
 	sftpClient *sftp.Client
 	copier     *file.Copier
 }
 
+// NewSSHClient creates a new SSHClient instance with the provided target configuration
 func NewSSHClient(target *config.Target) (Client, error) {
 	sshConfig := &ssh.ClientConfig{
 		User:            target.User,
@@ -75,6 +85,8 @@ func NewSSHClient(target *config.Target) (Client, error) {
 	}, nil
 }
 
+// Close implements the Client interface by releasing both SFTP and SSH client resources.
+// It ensures all connections are properly terminated.
 func (c *SSHClient) Close() {
 	if c.sftpClient != nil {
 		c.sftpClient.Close()
@@ -84,6 +96,7 @@ func (c *SSHClient) Close() {
 	}
 }
 
+// RunJob executes a job on a target using a new SSH client
 func RunJob(target *config.Target, job *config.Job) error {
 	client, err := NewSSHClient(target)
 	if err != nil {
@@ -99,6 +112,8 @@ func RunJob(target *config.Target, job *config.Job) error {
 	return nil
 }
 
+// ExecuteStep implements the Client interface by executing a single deployment step.
+// It handles different step types (Run, Copy, Docker) and provides progress information.
 func (c *SSHClient) ExecuteStep(step *config.Step, stepNum, totalSteps int) error {
 	switch {
 	case step.Run != "":

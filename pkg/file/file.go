@@ -1,3 +1,6 @@
+// Package file provides functionality for file system operations and copying files
+// between local and remote systems using SFTP. It includes abstractions for both
+// local filesystem operations and remote SFTP operations.
 package file
 
 import (
@@ -25,8 +28,13 @@ type SFTPClient interface {
 // DefaultFileSystem implements FileSystem using OS calls
 type DefaultFileSystem struct{}
 
-func (fs *DefaultFileSystem) Stat(name string) (os.FileInfo, error)      { return os.Stat(name) }
-func (fs *DefaultFileSystem) Open(name string) (io.ReadCloser, error)    { return os.Open(name) }
+// Stat implements the FileSystem interface by returning file info using os.Stat
+func (fs *DefaultFileSystem) Stat(name string) (os.FileInfo, error) { return os.Stat(name) }
+
+// Open implements the FileSystem interface by opening a file using os.Open
+func (fs *DefaultFileSystem) Open(name string) (io.ReadCloser, error) { return os.Open(name) }
+
+// ReadDir implements the FileSystem interface by reading directory entries using os.ReadDir
 func (fs *DefaultFileSystem) ReadDir(name string) ([]os.DirEntry, error) { return os.ReadDir(name) }
 
 // Copier handles file copy operations

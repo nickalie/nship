@@ -21,6 +21,7 @@ linters:
     - ineffassign
     - lll
   fast: false
+  disable-all: true
 
 linters-settings:
   lll:
@@ -49,9 +50,7 @@ issues:
     - path: _test\.go
       linters:
         - gocyclo
-        - errcheck
-        - dupl
-        - gosec
+  exclude-use-default: false
 
 run:
   deadline: 5m

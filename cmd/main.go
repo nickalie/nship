@@ -32,15 +32,21 @@ func (v *vaultWrapper) Decrypt(content, password string) (string, error) {
 	return vault.Decrypt(content, password)
 }
 
+// EnvLoader defines the interface for loading environment variables
+// from different file formats.
 type EnvLoader interface {
 	Load(filename string) error
 	Unmarshal(text string) (map[string]string, error)
 }
 
+// VaultDecrypter defines the interface for decrypting Ansible Vault
+// encrypted content.
 type VaultDecrypter interface {
 	Decrypt(content, password string) (string, error)
 }
 
+// App represents the main application structure that handles
+// configuration loading and job execution.
 type App struct {
 	envLoader      EnvLoader
 	vaultDecrypter VaultDecrypter
@@ -48,6 +54,8 @@ type App struct {
 	jobRunner      job.Runner
 }
 
+// NewApp creates and returns a new App instance with default implementations
+// for environment loading and vault decryption.
 func NewApp() *App {
 	return &App{
 		envLoader:      &godotenvWrapper{},
@@ -56,6 +64,9 @@ func NewApp() *App {
 	}
 }
 
+// Run executes the application with the provided configuration, job name,
+// environment paths, and vault password. It handles environment loading,
+// configuration parsing, and job execution.
 func (a *App) Run(configPath, jobName string, envPaths []string, vaultPassword *string) error {
 	if err := a.loadEnvironments(envPaths, vaultPassword); err != nil {
 		return fmt.Errorf("environment loading failed: %w", err)

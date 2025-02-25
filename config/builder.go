@@ -1,3 +1,7 @@
+// Package config provides functionality for creating and managing deployment configurations.
+// It includes a builder pattern implementation for constructing configurations programmatically,
+// along with support for loading configurations from various file formats including YAML,
+// TypeScript, JavaScript, and Go.
 package config
 
 import (
@@ -45,8 +49,8 @@ func (c *Builder) AddStep(step *Step) *Builder {
 	return c
 }
 
-// AddCopyStep creates and adds a new file copy step with the specified
-// source and destination paths. Returns the builder for method chaining.
+// AddRunStep creates and adds a new command execution step with the specified
+// command to the current job. Returns the builder for method chaining.
 func (c *Builder) AddRunStep(command string) *Builder {
 	step := &Step{
 		Run: command,
