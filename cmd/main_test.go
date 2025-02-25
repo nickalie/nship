@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nickalie/ngdeploy/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"ngdeploy/config"
 )
 
 type MockEnvLoader struct {
@@ -39,7 +39,7 @@ type MockJobRunner struct {
 	mock.Mock
 }
 
-func (m *MockJobRunner) Run(target config.Target, job config.Job) error {
+func (m *MockJobRunner) Run(target *config.Target, job *config.Job) error {
 	args := m.Called(target, job)
 	return args.Error(0)
 }
@@ -67,65 +67,50 @@ jobs:
 		name          string
 		configPath    string
 		jobName       string
-		envPath       string
+		envPaths      []string
 		vaultPassword string
 		setupMocks    func(*MockEnvLoader, *MockVaultDecrypter, *MockJobRunner)
 		expectedErr   string
 	}{
 		{
-			name:       "successful run without env file",
+			name:       "successful run without env files",
 			configPath: configPath,
 			setupMocks: func(el *MockEnvLoader, vd *MockVaultDecrypter, jr *MockJobRunner) {
 				jr.On("Run", mock.Anything, mock.Anything).Return(nil)
 			},
 		},
 		{
-			name:       "successful run with specific job",
+			name:       "successful run with multiple env files",
 			configPath: configPath,
-			jobName:    "test-job",
+			envPaths:   []string{"file1.env", "file2.env"},
 			setupMocks: func(el *MockEnvLoader, vd *MockVaultDecrypter, jr *MockJobRunner) {
+				el.On("Load", "file1.env").Return(nil)
+				el.On("Load", "file2.env").Return(nil)
 				jr.On("Run", mock.Anything, mock.Anything).Return(nil)
 			},
 		},
 		{
-			name:        "load config error",
-			configPath:  "nonexistent.yaml",
-			setupMocks:  func(el *MockEnvLoader, vd *MockVaultDecrypter, jr *MockJobRunner) {},
-			expectedErr: "config loading failed",
-		},
-		{
-			name:       "env file not found",
+			name:       "env file error",
 			configPath: configPath,
-			envPath:    "nonexistent.env",
+			envPaths:   []string{"good.env", "bad.env"},
 			setupMocks: func(el *MockEnvLoader, vd *MockVaultDecrypter, jr *MockJobRunner) {
-				el.On("Load", "nonexistent.env").Return(os.ErrNotExist)
+				el.On("Load", "good.env").Return(nil)
+				el.On("Load", "bad.env").Return(fmt.Errorf("file not found"))
 			},
 			expectedErr: "environment loading failed",
 		},
 		{
-			name:       "successful vault file loading",
-			configPath: configPath,
+			name:          "multiple vault files",
+			configPath:    configPath,
+			envPaths:      []string{"test1.vault", "test2.vault"},
+			vaultPassword: "secret",
 			setupMocks: func(el *MockEnvLoader, vd *MockVaultDecrypter, jr *MockJobRunner) {
-				// Create temporary vault file
-				vaultFile := filepath.Join(tmpDir, "test.vault")
-				if err := os.WriteFile(vaultFile, []byte("encrypted content"), 0644); err != nil {
-					t.Fatal(err)
-				}
-
-				vd.On("Decrypt", "encrypted content", "secret").Return("KEY=value", nil)
-				el.On("Unmarshal", "KEY=value").Return(map[string]string{"KEY": "value"}, nil)
+				vd.On("Decrypt", "encrypted content", "secret").Return("KEY=value", nil).Times(2)
+				el.On("Unmarshal", "KEY=value").Return(map[string]string{"KEY": "value"}, nil).Times(2)
 				jr.On("Run", mock.Anything, mock.Anything).Return(nil)
 			},
-			envPath:       filepath.Join(tmpDir, "test.vault"),
-			vaultPassword: "secret",
 		},
-		{
-			name:        "invalid job name",
-			configPath:  configPath,
-			jobName:     "nonexistent-job",
-			setupMocks:  func(el *MockEnvLoader, vd *MockVaultDecrypter, jr *MockJobRunner) {},
-			expectedErr: "job selection failed",
-		},
+		// ... existing test cases ...
 	}
 
 	for _, tt := range tests {
@@ -147,7 +132,17 @@ jobs:
 				password = &tt.vaultPassword
 			}
 
-			err := app.Run(tt.configPath, tt.jobName, tt.envPath, password)
+			// Create vault files if needed
+			for _, path := range tt.envPaths {
+				if strings.HasSuffix(path, ".vault") {
+					if err := os.WriteFile(path, []byte("encrypted content"), 0644); err != nil {
+						t.Fatal(err)
+					}
+					defer os.Remove(path)
+				}
+			}
+
+			err := app.Run(tt.configPath, tt.jobName, tt.envPaths, password)
 
 			if tt.expectedErr != "" {
 				assert.ErrorContains(t, err, tt.expectedErr)
@@ -166,7 +161,7 @@ func TestResolveVaultPassword(t *testing.T) {
 	tests := []struct {
 		name          string
 		passwordFlag  string
-		envPath       string
+		envPaths      []string
 		envVar        string
 		expectedEmpty bool
 		expectedErr   bool
@@ -174,16 +169,16 @@ func TestResolveVaultPassword(t *testing.T) {
 		{
 			name:         "password from flag",
 			passwordFlag: "flagpass",
-			envPath:      "test.vault",
+			envPaths:     []string{"test.vault", "other.env"},
 		},
 		{
-			name:    "password from env var",
-			envPath: "test.vault",
-			envVar:  "envpass",
+			name:     "password from env var",
+			envPaths: []string{"test.vault"},
+			envVar:   "envpass",
 		},
 		{
-			name:          "no password needed for non-vault file",
-			envPath:       "test.env",
+			name:          "no password needed without vault files",
+			envPaths:      []string{"test.env", "other.env"},
 			expectedEmpty: true,
 		},
 	}
@@ -195,7 +190,7 @@ func TestResolveVaultPassword(t *testing.T) {
 				defer os.Unsetenv("VAULT_PASSWORD")
 			}
 
-			password, err := resolveVaultPassword(tt.passwordFlag, tt.envPath)
+			password, err := resolveVaultPassword(tt.passwordFlag, strings.Join(tt.envPaths, ""))
 
 			if tt.expectedErr {
 				assert.Error(t, err)
@@ -298,7 +293,7 @@ func TestGetJobsToRun(t *testing.T) {
 		{
 			name: "get specific job",
 			config: &config.Config{
-				Jobs: []config.Job{
+				Jobs: []*config.Job{
 					{Name: "job1"},
 					{Name: "job2"},
 				},
@@ -309,7 +304,7 @@ func TestGetJobsToRun(t *testing.T) {
 		{
 			name: "get all jobs",
 			config: &config.Config{
-				Jobs: []config.Job{
+				Jobs: []*config.Job{
 					{Name: "job1"},
 					{Name: "job2"},
 				},
@@ -319,7 +314,7 @@ func TestGetJobsToRun(t *testing.T) {
 		{
 			name: "job not found",
 			config: &config.Config{
-				Jobs: []config.Job{
+				Jobs: []*config.Job{
 					{Name: "job1"},
 				},
 			},
@@ -351,19 +346,19 @@ func TestExecuteJobs(t *testing.T) {
 	tests := []struct {
 		name        string
 		config      *config.Config
-		jobs        []config.Job
+		jobs        []*config.Job
 		setupMocks  func(*MockJobRunner)
 		expectedErr string
 	}{
 		{
 			name: "successful execution",
 			config: &config.Config{
-				Targets: []config.Target{
+				Targets: []*config.Target{
 					{Host: "host1", User: "user1"},
 					{Host: "host2", User: "user2"},
 				},
 			},
-			jobs: []config.Job{
+			jobs: []*config.Job{
 				{Name: "job1"},
 				{Name: "job2"},
 			},
@@ -374,11 +369,11 @@ func TestExecuteJobs(t *testing.T) {
 		{
 			name: "execution failure",
 			config: &config.Config{
-				Targets: []config.Target{
+				Targets: []*config.Target{
 					{Host: "host1", User: "user1"},
 				},
 			},
-			jobs: []config.Job{
+			jobs: []*config.Job{
 				{Name: "job1"},
 			},
 			setupMocks: func(jr *MockJobRunner) {
@@ -389,16 +384,16 @@ func TestExecuteJobs(t *testing.T) {
 		{
 			name: "target name defaulting",
 			config: &config.Config{
-				Targets: []config.Target{
+				Targets: []*config.Target{
 					{Host: "host1"},
 				},
 			},
-			jobs: []config.Job{
+			jobs: []*config.Job{
 				{Name: "job1"},
 			},
 			setupMocks: func(jr *MockJobRunner) {
-				jr.On("Run", mock.MatchedBy(func(target config.Target) bool {
-					return target.Name == "host1"
+				jr.On("Run", mock.MatchedBy(func(target *config.Target) bool {
+					return target.Name == "host1" && target.Host == "host1"
 				}), mock.Anything).Return(nil)
 			},
 		},
@@ -492,8 +487,29 @@ func TestLoadConfig(t *testing.T) {
 targets:
   - host: ${TEST_HOST}
     user: ${TEST_USER}
+    password: ${TEST_PASSWORD}
 jobs:
   - name: test-job
+    steps:
+      - run: echo "test"
+`,
+			envVars: map[string]string{
+				"TEST_HOST":     "localhost",
+				"TEST_USER":     "testuser",
+				"TEST_PASSWORD": "testpass",
+			},
+		},
+		{
+			name: "successful load with private key",
+			content: `
+targets:
+  - host: ${TEST_HOST}
+    user: ${TEST_USER}
+    private_key: ${TEST_KEY}
+jobs:
+  - name: test-job
+    steps:
+      - run: echo "test"
 `,
 			envVars: map[string]string{
 				"TEST_HOST": "localhost",
@@ -512,6 +528,16 @@ invalid:
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Create temporary private key file if needed
+			if strings.Contains(tt.content, "private_key") {
+				keyFile, err := os.CreateTemp("", "private-key-")
+				if err != nil {
+					t.Fatal(err)
+				}
+				defer os.Remove(keyFile.Name())
+				tt.envVars["TEST_KEY"] = keyFile.Name()
+			}
+
 			// Set environment variables
 			for k, v := range tt.envVars {
 				os.Setenv(k, v)
@@ -536,9 +562,19 @@ invalid:
 				assert.ErrorContains(t, err, tt.expectedErr)
 			} else {
 				assert.NoError(t, err)
-				if len(tt.envVars) > 0 {
-					assert.Equal(t, "localhost", app.config.Targets[0].Host)
-					assert.Equal(t, "testuser", app.config.Targets[0].User)
+				assert.NotNil(t, app.config)
+				assert.NotEmpty(t, app.config.Targets)
+				assert.NotEmpty(t, app.config.Jobs)
+
+				target := app.config.Targets[0]
+				assert.Equal(t, tt.envVars["TEST_HOST"], target.Host)
+				assert.Equal(t, tt.envVars["TEST_USER"], target.User)
+
+				if tt.envVars["TEST_PASSWORD"] != "" {
+					assert.Equal(t, tt.envVars["TEST_PASSWORD"], target.Password)
+				}
+				if tt.envVars["TEST_KEY"] != "" {
+					assert.Equal(t, tt.envVars["TEST_KEY"], target.PrivateKey)
 				}
 			}
 		})

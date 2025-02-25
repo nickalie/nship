@@ -41,7 +41,7 @@ jobs:
 				"USER": "testuser",
 			},
 			expected: &Config{
-				Targets: []Target{
+				Targets: []*Target{
 					{
 						Name:     "test-server",
 						Host:     "localhost",
@@ -50,10 +50,10 @@ jobs:
 						Port:     22,
 					},
 				},
-				Jobs: []Job{
+				Jobs: []*Job{
 					{
 						Name: "deploy",
-						Steps: []Step{
+						Steps: []*Step{
 							{Run: "echo \"hello\""},
 							{Copy: &CopyStep{
 								Src: "./app",

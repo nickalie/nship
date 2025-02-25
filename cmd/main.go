@@ -56,8 +56,8 @@ func NewApp() *App {
 	}
 }
 
-func (a *App) Run(configPath, jobName, envPath string, vaultPassword *string) error {
-	if err := a.loadEnvironment(envPath, vaultPassword); err != nil {
+func (a *App) Run(configPath, jobName string, envPaths []string, vaultPassword *string) error {
+	if err := a.loadEnvironments(envPaths, vaultPassword); err != nil {
 		return fmt.Errorf("environment loading failed: %w", err)
 	}
 
@@ -71,6 +71,15 @@ func (a *App) Run(configPath, jobName, envPath string, vaultPassword *string) er
 	}
 
 	return a.executeJobs(jobs)
+}
+
+func (a *App) loadEnvironments(envPaths []string, vaultPassword *string) error {
+	for _, path := range envPaths {
+		if err := a.loadEnvironment(path, vaultPassword); err != nil {
+			return fmt.Errorf("failed to load environment file %s: %w", path, err)
+		}
+	}
+	return nil
 }
 
 func (a *App) loadEnvironment(envPath string, vaultPassword *string) error {
@@ -178,7 +187,7 @@ func promptVaultPassword() (string, error) {
 	return strings.TrimSpace(string(password)), nil
 }
 
-func resolveVaultPassword(passwordFlag string, envPath string) (*string, error) {
+func resolveVaultPassword(passwordFlag string, envPaths string) (*string, error) {
 	if passwordFlag != "" {
 		return &passwordFlag, nil
 	}
@@ -187,7 +196,7 @@ func resolveVaultPassword(passwordFlag string, envPath string) (*string, error) 
 		return &envVar, nil
 	}
 
-	if !strings.HasSuffix(envPath, ".vault") {
+	if !strings.Contains(envPaths, ".vault") {
 		return new(string), nil
 	}
 
@@ -201,18 +210,23 @@ func resolveVaultPassword(passwordFlag string, envPath string) (*string, error) 
 func main() {
 	configPath := flag.String("config", "deploy.yaml", "Path to configuration file")
 	jobName := flag.String("job", "", "Name of specific job to run")
-	envPath := flag.String("env", "", "Path to .env file")
+	envPaths := flag.String("env", "", "Comma-separated paths to environment files")
 	vaultPassword := flag.String("vault-password", "", "Password for Ansible Vault file")
 	flag.Parse()
 
-	password, err := resolveVaultPassword(*vaultPassword, *envPath)
+	paths := []string{}
+	if *envPaths != "" {
+		paths = strings.Split(*envPaths, ",")
+	}
+
+	password, err := resolveVaultPassword(*vaultPassword, strings.Join(paths, ""))
 	if err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}
 
 	app := NewApp()
-	if err := app.Run(*configPath, *jobName, *envPath, password); err != nil {
+	if err := app.Run(*configPath, *jobName, paths, password); err != nil {
 		fmt.Printf("Error: %v\n", err)
 		os.Exit(1)
 	}

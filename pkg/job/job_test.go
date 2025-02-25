@@ -2,12 +2,12 @@ package job
 
 import (
 	"errors"
+	"github.com/nickalie/ngdeploy/pkg/file"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
-	"ngdeploy/pkg/file"
 	"testing"
 
-	"ngdeploy/config"
+	"github.com/nickalie/ngdeploy/config"
 )
 
 type MockSSHClient struct {
@@ -16,7 +16,7 @@ type MockSSHClient struct {
 	copier     *file.Copier
 }
 
-func (m *MockSSHClient) ExecuteStep(step config.Step, stepNum, totalSteps int) error {
+func (m *MockSSHClient) ExecuteStep(step *config.Step, stepNum, totalSteps int) error {
 	return nil
 }
 

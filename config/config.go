@@ -182,8 +182,6 @@ func loadCmdConfig(dir string, args ...string) (*Config, error) {
 
 	outputStr := parts[len(parts)-2]
 
-	fmt.Println(outputStr)
-
 	var config Config
 
 	if err := json.Unmarshal([]byte(outputStr), &config); err != nil {
