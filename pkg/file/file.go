@@ -99,31 +99,38 @@ func (c *Copier) CopyDir(src, dst string, exclude []string) error {
 		return fmt.Errorf("read source directory: %w", err)
 	}
 
+	return c.processEntries(entries, src, dst, exclude)
+}
+
+func (c *Copier) processEntries(entries []os.DirEntry, src, dst string, exclude []string) error {
 	for _, entry := range entries {
-		srcPath := filepath.Join(src, entry.Name())
-		dstPath := filepath.ToSlash(filepath.Join(dst, entry.Name()))
-
-		if isExcluded(srcPath, exclude) {
-			continue
-		}
-
-		if ok, err := c.shouldTransferFile(srcPath, dstPath); err != nil {
-			return fmt.Errorf("check file transfer: %w", err)
-		} else if !ok {
-			continue
-		}
-
-		if entry.IsDir() {
-			if err := c.CopyDir(srcPath, dstPath, exclude); err != nil {
-				return err
-			}
-		} else {
-			if err := c.CopyFile(srcPath, dstPath); err != nil {
-				return err
-			}
+		if err := c.processEntry(entry, src, dst, exclude); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func (c *Copier) processEntry(entry os.DirEntry, src, dst string, exclude []string) error {
+	srcPath := filepath.Join(src, entry.Name())
+	dstPath := filepath.ToSlash(filepath.Join(dst, entry.Name()))
+
+	if isExcluded(srcPath, exclude) {
+		return nil
+	}
+
+	ok, err := c.shouldTransferFile(srcPath, dstPath)
+	if err != nil {
+		return fmt.Errorf("check file transfer: %w", err)
+	}
+	if !ok {
+		return nil
+	}
+
+	if entry.IsDir() {
+		return c.CopyDir(srcPath, dstPath, exclude)
+	}
+	return c.CopyFile(srcPath, dstPath)
 }
 
 func (c *Copier) shouldTransferFile(localPath, remotePath string) (bool, error) {

@@ -210,7 +210,7 @@ func buildDockerCreateCommand(docker *config.DockerStep) string {
 	}
 
 	for k, v := range docker.Environment {
-		args = append(args, "-e", fmt.Sprintf("%s=\"%s\"", k, v))
+		args = append(args, "-e", fmt.Sprintf("%s=%q", k, v))
 	}
 
 	args = append(args,
@@ -243,7 +243,7 @@ func appendDockerArgs(flag string, values []string) []string {
 func appendDockerLabels(flag string, labels map[string]string) []string {
 	args := make([]string, 0, len(labels)*2)
 	for k, v := range labels {
-		args = append(args, flag, fmt.Sprintf("%s=\"%s\"", k, v))
+		args = append(args, flag, fmt.Sprintf("%s=%q", k, v))
 	}
 	return args
 }
@@ -287,8 +287,8 @@ func runShellCommand(session *ssh.Session, shell, cmd string) error {
 }
 
 func escapeCommand(cmd string) string {
-	cmd = "'" + strings.Replace(cmd, "'", "'\\''", -1) + "'"
-	return strings.Replace(cmd, "`", "\\`", -1)
+	cmd = "'" + strings.ReplaceAll(cmd, "'", "'\\''") + "'"
+	return strings.ReplaceAll(cmd, "`", "\\`")
 }
 
 func pipeOutput(r io.Reader, w io.Writer) {

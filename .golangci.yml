@@ -1,0 +1,56 @@
+linters:
+  enable:
+    - gofmt
+    - govet
+    - gocyclo
+    - gosimple
+    - ineffassign
+    - misspell
+    - revive
+    - staticcheck
+    - unused
+    - misspell
+    - gocritic
+    - dupl
+    - typecheck
+    - nakedret
+    - copyloopvar
+    - prealloc
+    - unconvert
+    - stylecheck
+    - ineffassign
+    - lll
+  fast: false
+
+linters-settings:
+  lll:
+    line-length: 140
+  misspell:
+    locale: US
+  gocyclo:
+    min-complexity: 7
+  revive:
+    rules:
+      - name: exported
+        arguments:
+          - disableStutteringCheck
+  gocritic:
+    enabled-tags:
+      - performance
+      - style
+    disabled-checks:
+      - octalLiteral
+      - ifElseChain
+
+issues:
+  exclude-rules:
+    - path: _test\.go
+      linters:
+        - gocyclo
+        - errcheck
+        - dupl
+        - gosec
+
+run:
+  deadline: 5m
+  tests: true

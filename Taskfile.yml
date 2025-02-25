@@ -5,4 +5,7 @@ tasks:
     dir: cmd
     cmds:
       - go build -o ../bin/ngdeploy.exe
-      - npx shx cp ../bin/ngdeploy.exe D:/develop/tools/go/path/bin
+  lint:
+    cmd: golangci-lint run ./...
+  lint-fix:
+    cmd: golangci-lint run ./...

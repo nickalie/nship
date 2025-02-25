@@ -61,51 +61,61 @@ type CopyStep struct {
 var validate = validator.New()
 
 func LoadConfig(configPath string) (*Config, error) {
-	ext := strings.ToLower(filepath.Ext(configPath))
-
-	var config *Config
-	var err error
-
-	switch ext {
-	case ".yaml", ".yml":
-		config, err = loadYAMLConfig(configPath)
-	case ".ts":
-		config, err = loadTypeScriptConfig(configPath)
-	case ".js", ".mjs":
-		config, err = loadJavaScriptConfig(configPath)
-	case ".go":
-		config, err = loadGolangConfig(configPath)
-	default:
-		return nil, fmt.Errorf("unsupported config file extension: %s", ext)
-	}
-
+	config, err := loadConfigByExtension(configPath)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := validate.Struct(config); err != nil {
-		if validationErrors, ok := err.(validator.ValidationErrors); ok {
-			return nil, fmt.Errorf("config validation failed: %s", formatValidationErrors(validationErrors))
-		}
-		return nil, fmt.Errorf("config validation failed: %w", err)
+	if err := validateConfig(config); err != nil {
+		return nil, err
 	}
 
 	return config, nil
+}
+
+func loadConfigByExtension(configPath string) (*Config, error) {
+	ext := strings.ToLower(filepath.Ext(configPath))
+
+	loaders := map[string]func(string) (*Config, error){
+		".yaml": loadYAMLConfig,
+		".yml":  loadYAMLConfig,
+		".ts":   loadTypeScriptConfig,
+		".js":   loadJavaScriptConfig,
+		".mjs":  loadJavaScriptConfig,
+		".go":   loadGolangConfig,
+	}
+
+	loader, ok := loaders[ext]
+	if !ok {
+		return nil, fmt.Errorf("unsupported config file extension: %s", ext)
+	}
+
+	return loader(configPath)
+}
+
+func validateConfig(config *Config) error {
+	if err := validate.Struct(config); err != nil {
+		if validationErrors, ok := err.(validator.ValidationErrors); ok {
+			return fmt.Errorf("config validation failed: %s", formatValidationErrors(validationErrors))
+		}
+		return fmt.Errorf("config validation failed: %w", err)
+	}
+	return nil
 }
 
 func loadGolangConfig(configPath string) (*Config, error) {
 	return loadCmdConfig("", "go", "run", configPath)
 }
 
-func formatValidationErrors(errors validator.ValidationErrors) string {
-	var errMsgs []string
-	for _, err := range errors {
-		errMsgs = append(errMsgs, fmt.Sprintf(
+func formatValidationErrors(errs validator.ValidationErrors) string {
+	errMsgs := make([]string, 0, len(errs))
+	for index, err := range errs {
+		errMsgs[index] = fmt.Sprintf(
 			"Field '%s' failed validation: %s (condition: %s)",
 			err.Field(),
 			err.Tag(),
 			err.Param(),
-		))
+		)
 	}
 	return strings.Join(errMsgs, "\n")
 }
@@ -162,7 +172,15 @@ func loadTypeScriptConfig(configPath string) (*Config, error) {
 }
 
 func loadJavaScriptConfig(configPath string) (*Config, error) {
-	return loadCmdConfig(filepath.Dir(configPath), "node", "-e", fmt.Sprintf("(async ()=>{const m=await import(\"./%s\");console.log(JSON.stringify(typeof m.default==='function'?await m.default():m.default));})();", filepath.Base(configPath)))
+	return loadCmdConfig(
+		filepath.Dir(configPath),
+		"node",
+		"-e",
+		fmt.Sprintf(
+			"(async ()=>{const m=await import(\"./%s\");console.log(JSON.stringify(typeof m.default==='function'?await m.default():m.default));})();", //nolint:lll //single line js code to wrap compiled TypeScript
+			filepath.Base(configPath),
+		),
+	)
 }
 
 func loadCmdConfig(dir string, args ...string) (*Config, error) {
@@ -201,7 +219,9 @@ func replaceEnvVariables(content string) string {
 
 func nodeError(err error) error {
 	if strings.Contains(err.Error(), "executable file not found") {
-		return errors.New("NodeJS (https://nodejs.org/) is not installed or not in PATH. NodeJS is required to load JavaScript and TypeScript configuration files")
+		return errors.New(
+			"NodeJS (https://nodejs.org/) is not installed or not in PATH. NodeJS is required to load JavaScript and TypeScript configuration files",
+		)
 	}
 
 	return err

@@ -41,23 +41,12 @@ type mockFileInfo struct {
 	modTime time.Time
 }
 
-type mockDirEntry struct {
-	name  string
-	isDir bool
-}
-
 func (m mockFileInfo) Name() string       { return m.name }
 func (m mockFileInfo) Size() int64        { return m.size }
 func (m mockFileInfo) Mode() os.FileMode  { return m.mode }
 func (m mockFileInfo) ModTime() time.Time { return m.modTime }
 func (m mockFileInfo) IsDir() bool        { return m.isDir }
 func (m mockFileInfo) Sys() interface{}   { return nil }
-
-// DirEntry interface implementation
-func (m mockDirEntry) Name() string               { return m.name }
-func (m mockDirEntry) IsDir() bool                { return m.isDir }
-func (m mockDirEntry) Type() os.FileMode          { return 0 }
-func (m mockDirEntry) Info() (os.FileInfo, error) { return nil, nil }
 
 // MockFileSystem implementation
 func (m *mockFileSystem) Stat(name string) (os.FileInfo, error) {

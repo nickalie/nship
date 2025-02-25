@@ -755,7 +755,7 @@ func TestPromptVaultPassword(t *testing.T) {
 	// Write test password to pipe
 	go func() {
 		defer w.Close()
-		w.Write([]byte("testpassword\n"))
+		w.WriteString("testpassword\n")
 	}()
 
 	// Test password prompt

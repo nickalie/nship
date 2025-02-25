@@ -2,18 +2,12 @@ package job
 
 import (
 	"errors"
-	"github.com/nickalie/ngdeploy/pkg/file"
-	"github.com/pkg/sftp"
-	"golang.org/x/crypto/ssh"
 	"testing"
 
 	"github.com/nickalie/ngdeploy/config"
 )
 
 type MockSSHClient struct {
-	sshClient  *ssh.Client
-	sftpClient *sftp.Client
-	copier     *file.Copier
 }
 
 func (m *MockSSHClient) ExecuteStep(step *config.Step, stepNum, totalSteps int) error {
@@ -22,7 +16,7 @@ func (m *MockSSHClient) ExecuteStep(step *config.Step, stepNum, totalSteps int) 
 
 func (m *MockSSHClient) Close() {}
 
-func NewMockSSHClient(target config.Target) (Client, error) {
+func NewMockSSHClient(target *config.Target) (Client, error) {
 	if target.Host == "invalidhost" {
 		return nil, errors.New("SSH connection failed")
 	}
@@ -56,7 +50,7 @@ func TestNewSSHClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := NewMockSSHClient(tt.target)
+			_, err := NewMockSSHClient(&tt.target)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewSSHClient() error = %v, wantErr %v", err, tt.wantErr)
 			}

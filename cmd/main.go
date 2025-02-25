@@ -187,7 +187,7 @@ func promptVaultPassword() (string, error) {
 	return strings.TrimSpace(string(password)), nil
 }
 
-func resolveVaultPassword(passwordFlag string, envPaths string) (*string, error) {
+func resolveVaultPassword(passwordFlag, envPaths string) (*string, error) {
 	if passwordFlag != "" {
 		return &passwordFlag, nil
 	}
