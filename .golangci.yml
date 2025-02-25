@@ -43,6 +43,8 @@ linters-settings:
       - ifElseChain
 
 issues:
+  exclude-dirs:
+    - vendor
   exclude-rules:
     - path: _test\.go
       linters:
