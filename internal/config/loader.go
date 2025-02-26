@@ -207,8 +207,8 @@ func (l *DefaultLoader) loadGolangConfig(configPath string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w\n%s", err, string(output))
 	}
+    }
 
-    
 	parts := strings.Split(string(output), "\n")
 
 	if len(parts) < 2 {
