@@ -1,19 +1,18 @@
-// Package config provides functionality for creating and managing deployment configurations.
-// It includes a builder pattern implementation for constructing configurations programmatically,
-// along with support for loading configurations from various file formats including YAML,
-// TypeScript, JavaScript, and Go.
 package config
 
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/nickalie/nship/internal/core/job"
+	"github.com/nickalie/nship/internal/core/target"
 )
 
 // Builder facilitates the construction of deployment configurations
 // using a fluent interface pattern.
 type Builder struct {
 	config     *Config
-	currentJob *Job
+	currentJob *job.Job
 }
 
 // NewBuilder creates and returns a new Builder instance with an initialized
@@ -26,64 +25,68 @@ func NewBuilder() *Builder {
 
 // AddTarget appends a new target to the configuration and returns
 // the builder for method chaining.
-func (c *Builder) AddTarget(target *Target) *Builder {
-	c.config.Targets = append(c.config.Targets, target)
-	return c
+func (b *Builder) AddTarget(tgt *target.Target) *Builder {
+	b.config.Targets = append(b.config.Targets, tgt)
+	return b
 }
 
 // AddJob creates a new job with the specified name, adds it to the configuration,
 // and sets it as the current job. Returns the builder for method chaining.
-func (c *Builder) AddJob(name string) *Builder {
-	job := &Job{
+func (b *Builder) AddJob(name string) *Builder {
+	newJob := &job.Job{
 		Name: name,
 	}
-	c.config.Jobs = append(c.config.Jobs, job)
-	c.currentJob = job
-	return c
+	b.config.Jobs = append(b.config.Jobs, newJob)
+	b.currentJob = newJob
+	return b
 }
 
 // AddStep adds the provided step to the current job and returns
 // the builder for method chaining.
-func (c *Builder) AddStep(step *Step) *Builder {
-	c.currentJob.Steps = append(c.currentJob.Steps, step)
-	return c
+func (b *Builder) AddStep(step *job.Step) *Builder {
+	b.currentJob.Steps = append(b.currentJob.Steps, step)
+	return b
 }
 
 // AddRunStep creates and adds a new command execution step with the specified
 // command to the current job. Returns the builder for method chaining.
-func (c *Builder) AddRunStep(command string) *Builder {
-	step := &Step{
+func (b *Builder) AddRunStep(command string) *Builder {
+	step := &job.Step{
 		Run: command,
 	}
-	return c.AddStep(step)
+	return b.AddStep(step)
 }
 
 // AddCopyStep creates and adds a new file copy step with the specified
 // source and destination paths. Returns the builder for method chaining.
-func (c *Builder) AddCopyStep(src, dst string) *Builder {
-	step := &Step{
-		Copy: &CopyStep{
+func (b *Builder) AddCopyStep(src, dst string) *Builder {
+	step := &job.Step{
+		Copy: &job.CopyStep{
 			Src: src,
 			Dst: dst,
 		},
 	}
-	return c.AddStep(step)
+	return b.AddStep(step)
 }
 
 // AddDockerStep adds a new Docker execution step with the specified
 // Docker configuration. Returns the builder for method chaining.
-func (c *Builder) AddDockerStep(docker *DockerStep) *Builder {
-	step := &Step{
+func (b *Builder) AddDockerStep(docker *job.DockerStep) *Builder {
+	step := &job.Step{
 		Docker: docker,
 	}
-	return c.AddStep(step)
+	return b.AddStep(step)
+}
+
+// GetConfig returns the built configuration.
+func (b *Builder) GetConfig() *Config {
+	return b.config
 }
 
 // Print marshals the configuration to JSON and prints it to stdout.
 // Returns an error if JSON marshaling fails.
-func (c *Builder) Print() error {
-	d, err := json.Marshal(c.config)
-
+func (b *Builder) Print() error {
+	d, err := json.Marshal(b.config)
 	if err != nil {
 		return err
 	}
