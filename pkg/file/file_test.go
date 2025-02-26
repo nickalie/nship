@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -468,4 +469,172 @@ func TestCopyDir(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestProcessEntry(t *testing.T) {
+	tests := []struct {
+		name        string
+		entry       *mockDirEntry
+		src         string
+		dst         string
+		exclude     []string
+		srcFiles    map[string]*mockFile
+		remoteFiles map[string]*mockFile
+		wantErr     bool
+		setupMock   func(*mockFileSystem, *mockSFTPClient)
+	}{
+		{
+			name: "process file entry successfully",
+			entry: &mockDirEntry{
+				name:  "test.txt",
+				isDir: false,
+			},
+			src: "/src",
+			dst: "/dst",
+			srcFiles: map[string]*mockFile{
+				"test.txt": { // Use relative path
+					content: "test content",
+					mode:    0644,
+					size:    12,
+					isDir:   false,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "process directory entry successfully",
+			entry: &mockDirEntry{
+				name:  "testdir",
+				isDir: true,
+			},
+			src: "/src",
+			dst: "/dst",
+			srcFiles: map[string]*mockFile{
+				"testdir": { // Use relative path
+					mode:  0755,
+					isDir: true,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "excluded file",
+			entry: &mockDirEntry{
+				name:  "test.tmp",
+				isDir: false,
+			},
+			src:     "/src",
+			dst:     "/dst",
+			exclude: []string{"test.tmp"},
+			srcFiles: map[string]*mockFile{
+				"test.tmp": { // Use relative path
+					content: "temp content",
+					mode:    0644,
+					isDir:   false,
+				},
+			},
+			wantErr: false,
+		},
+		{
+			name: "stat error",
+			entry: &mockDirEntry{
+				name:  "test.txt",
+				isDir: false,
+			},
+			src:     "/src",
+			dst:     "/dst",
+			wantErr: true,
+			setupMock: func(fs *mockFileSystem, sftp *mockSFTPClient) {
+				fs.statErr = errors.New("stat error")
+			},
+		},
+		{
+			name: "same size file skip",
+			entry: &mockDirEntry{
+				name:  "test.txt",
+				isDir: false,
+			},
+			src: "/src",
+			dst: "/dst",
+			srcFiles: map[string]*mockFile{
+				"test.txt": { // Use relative path
+					content: "content",
+					size:    7,
+					mode:    0644,
+					isDir:   false,
+				},
+			},
+			remoteFiles: map[string]*mockFile{
+				"test.txt": { // Use relative path
+					content: "content",
+					size:    7,
+					mode:    0644,
+					isDir:   false,
+				},
+			},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := &mockFileSystem{
+				files: make(map[string]*mockFile),
+			}
+			sftp := &mockSFTPClient{
+				files: make(map[string]*mockFile),
+			}
+
+			// Set up source files
+			for name, file := range tt.srcFiles {
+				fullPath := filepath.Join(tt.src, name)
+				fs.files[fullPath] = file
+			}
+
+			// Set up remote files
+			for name, file := range tt.remoteFiles {
+				fullPath := filepath.Join(tt.dst, name)
+				sftp.files[fullPath] = file
+			}
+
+			if tt.setupMock != nil {
+				tt.setupMock(fs, sftp)
+			}
+
+			copier := NewCopier(fs, sftp)
+			err := copier.processEntry(tt.entry, tt.src, tt.dst, tt.exclude)
+
+			if (err != nil) != tt.wantErr {
+				t.Errorf("processEntry() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+// mockDirEntry implements os.DirEntry
+type mockDirEntry struct {
+	name  string
+	isDir bool
+}
+
+func (m *mockDirEntry) Name() string {
+	return m.name
+}
+
+func (m *mockDirEntry) IsDir() bool {
+	return m.isDir
+}
+
+func (m *mockDirEntry) Type() os.FileMode {
+	if m.isDir {
+		return os.ModeDir
+	}
+	return 0
+}
+
+func (m *mockDirEntry) Info() (os.FileInfo, error) {
+	return mockFileInfo{
+		name:  m.name,
+		isDir: m.isDir,
+	}, nil
 }

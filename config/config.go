@@ -5,7 +5,6 @@ package config
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/go-playground/validator/v10"
@@ -120,14 +119,14 @@ func loadGolangConfig(configPath string) (*Config, error) {
 }
 
 func formatValidationErrors(errs validator.ValidationErrors) string {
-	errMsgs := make([]string, 0, len(errs))
-	for index, err := range errs {
-		errMsgs[index] = fmt.Sprintf(
+	var errMsgs []string
+	for _, err := range errs {
+		errMsgs = append(errMsgs, fmt.Sprintf(
 			"Field '%s' failed validation: %s (condition: %s)",
 			err.Field(),
 			err.Tag(),
 			err.Param(),
-		)
+		))
 	}
 	return strings.Join(errMsgs, "\n")
 }
@@ -201,7 +200,7 @@ func loadCmdConfig(dir string, args ...string) (*Config, error) {
 
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return nil, fmt.Errorf("%w\n%s", nodeError(err), string(output))
+		return nil, fmt.Errorf("%w\n%s", err, string(output))
 	}
 
 	parts := strings.Split(string(output), "\n")
@@ -227,14 +226,4 @@ func replaceEnvVariables(content string) string {
 		key := re.FindStringSubmatch(s)[1]
 		return os.Getenv(key)
 	})
-}
-
-func nodeError(err error) error {
-	if strings.Contains(err.Error(), "executable file not found") {
-		return errors.New(
-			"NodeJS (https://nodejs.org/) is not installed or not in PATH. NodeJS is required to load JavaScript and TypeScript configuration files",
-		)
-	}
-
-	return err
 }

@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/nickalie/nship/config"
@@ -16,6 +17,20 @@ import (
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )
+
+// CopierInterface defines the interface for file copying operations
+type CopierInterface interface {
+	CopyPath(src, dst string, exclude []string) error
+}
+
+// SSHSession represents an SSH session
+type SSHSession interface {
+	Start(string) error
+	Wait() error
+	StdoutPipe() (io.Reader, error)
+	StderrPipe() (io.Reader, error)
+	Close() error
+}
 
 // SFTPAdapter adapts sftp.Client to our SFTPClient interface
 type SFTPAdapter struct {
@@ -48,11 +63,49 @@ type Client interface {
 	Close()
 }
 
+// SSHClientInterface represents SSH client functionality
+type SSHClientInterface interface {
+	NewSession() (SSHSession, error)
+	Close() error
+}
+
+// SFTPClientInterface represents SFTP client functionality
+type SFTPClientInterface interface {
+	Create(path string) (io.WriteCloser, error)
+	MkdirAll(path string) error
+	Close() error
+}
+
+// SSHAdapter adapts ssh.Client to our SSHClientInterface
+type SSHAdapter struct {
+	*ssh.Client
+}
+
+// NewSSHAdapter creates a new SSHAdapter instance
+func NewSSHAdapter(client *ssh.Client) *SSHAdapter {
+	return &SSHAdapter{Client: client}
+}
+
+// NewSession implements SSHClientInterface by adapting the underlying ssh.Client's NewSession method
+func (a *SSHAdapter) NewSession() (SSHSession, error) {
+	return a.Client.NewSession()
+}
+
+// Close implements SSHClientInterface
+func (a *SSHAdapter) Close() error {
+	return a.Client.Close()
+}
+
+// Close implements SFTPClientInterface
+func (a *SFTPAdapter) Close() error {
+	return a.Client.Close()
+}
+
 // SSHClient implements the Client interface using SSH connections
 type SSHClient struct {
-	sshClient  *ssh.Client
-	sftpClient *sftp.Client
-	copier     *file.Copier
+	sshClient  SSHClientInterface
+	sftpClient SFTPClientInterface
+	copier     CopierInterface
 }
 
 // NewSSHClient creates a new SSHClient instance with the provided target configuration
@@ -64,23 +117,23 @@ func NewSSHClient(target *config.Target) (Client, error) {
 		Timeout:         5 * time.Second,
 	}
 
-	client, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", target.Host, getPort(target.Port)), sshConfig)
+	sshClient, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", target.Host, getPort(target.Port)), sshConfig)
 	if err != nil {
 		return nil, fmt.Errorf("SSH connection failed: %w", err)
 	}
 
-	sftpClient, err := sftp.NewClient(client)
+	sftpClient, err := sftp.NewClient(sshClient)
 	if err != nil {
-		client.Close()
+		sshClient.Close()
 		return nil, fmt.Errorf("SFTP connection failed: %w", err)
 	}
 
-	// Create Copier with default filesystem and SFTP adapter
-	copier := file.NewCopier(&file.DefaultFileSystem{}, NewSFTPAdapter(sftpClient))
+	sftpAdapter := NewSFTPAdapter(sftpClient)
+	copier := file.NewCopier(&file.DefaultFileSystem{}, sftpAdapter)
 
 	return &SSHClient{
-		sshClient:  client,
-		sftpClient: sftpClient,
+		sshClient:  NewSSHAdapter(sshClient),
+		sftpClient: sftpAdapter,
 		copier:     copier,
 	}, nil
 }
@@ -89,16 +142,19 @@ func NewSSHClient(target *config.Target) (Client, error) {
 // It ensures all connections are properly terminated.
 func (c *SSHClient) Close() {
 	if c.sftpClient != nil {
-		c.sftpClient.Close()
+		_ = c.sftpClient.Close()
 	}
 	if c.sshClient != nil {
-		c.sshClient.Close()
+		_ = c.sshClient.Close()
 	}
 }
 
+// Add this at the package level, before any tests
+var sshClientFactory = NewSSHClient
+
 // RunJob executes a job on a target using a new SSH client
 func RunJob(target *config.Target, job *config.Job) error {
-	client, err := NewSSHClient(target)
+	client, err := sshClientFactory(target)
 	if err != nil {
 		return fmt.Errorf("failed to create SSH client: %w", err)
 	}
@@ -169,7 +225,7 @@ func (c *SSHClient) executeCommand(step *config.Step, stepNum, totalSteps int) e
 	}
 	defer session.Close()
 
-	return runShellCommand(session, getShell(step.Shell), step.Run)
+	return runShellCommand(session, getShell(step.Shell), step.Run, os.Stdout, os.Stderr)
 }
 
 func (c *SSHClient) executeCopy(copyStep *config.CopyStep, stepNum, totalSteps int) error {
@@ -188,7 +244,7 @@ func (c *SSHClient) executeDocker(step *config.Step, stepNum, totalSteps int) er
 	defer session.Close()
 
 	commands := buildDockerCommands(docker)
-	return runShellCommand(session, getShell(step.Shell), strings.Join(commands, "\n"))
+	return runShellCommand(session, getShell(step.Shell), strings.Join(commands, "\n"), os.Stdout, os.Stderr)
 }
 
 func buildDockerCommands(docker *config.DockerStep) []string {
@@ -278,14 +334,13 @@ func getShell(shell string) string {
 	return shell
 }
 
-func runShellCommand(session *ssh.Session, shell, cmd string) error {
-	fmt.Println(cmd)
-	stdout, err := session.StdoutPipe()
+func runShellCommand(session SSHSession, shell, cmd string, stdout, stderr io.Writer) error {
+	stdoutPipe, err := session.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stdout pipe: %w", err)
 	}
 
-	stderr, err := session.StderrPipe()
+	stderrPipe, err := session.StderrPipe()
 	if err != nil {
 		return fmt.Errorf("failed to get stderr pipe: %w", err)
 	}
@@ -295,10 +350,26 @@ func runShellCommand(session *ssh.Session, shell, cmd string) error {
 		return fmt.Errorf("failed to start command: %w", err)
 	}
 
-	go pipeOutput(stdout, os.Stdout)
-	go pipeOutput(stderr, os.Stderr)
+	// Use WaitGroup to ensure output is fully processed
+	var wg sync.WaitGroup
+	wg.Add(2)
 
-	return session.Wait()
+	go func() {
+		pipeOutput(stdoutPipe, stdout)
+		wg.Done()
+	}()
+	go func() {
+		pipeOutput(stderrPipe, stderr)
+		wg.Done()
+	}()
+
+	// Wait for command to finish
+	err = session.Wait()
+
+	// Wait for output processing to complete
+	wg.Wait()
+
+	return err
 }
 
 func escapeCommand(cmd string) string {

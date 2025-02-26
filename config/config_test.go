@@ -1,7 +1,10 @@
 package config
 
 import (
+	"github.com/go-playground/validator/v10"
 	"os"
+	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -165,4 +168,444 @@ func TestReplaceEnvVariables(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestFormatValidationErrors(t *testing.T) {
+	// Create a struct for testing validation
+	type TestStruct struct {
+		Field1 string `validate:"required"`
+		Field2 int    `validate:"min=1,max=10"`
+	}
+
+	// Initialize validator
+	validate := validator.New()
+
+	t.Run("test single validation error", func(t *testing.T) {
+		test := TestStruct{
+			Field1: "",
+			Field2: 5,
+		}
+
+		err := validate.Struct(test)
+		assert.Error(t, err)
+
+		valErrs, ok := err.(validator.ValidationErrors)
+		assert.True(t, ok)
+
+		result := formatValidationErrors(valErrs)
+		expected := "Field 'Field1' failed validation: required (condition: )"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("test multiple validation errors", func(t *testing.T) {
+		test := TestStruct{
+			Field1: "",
+			Field2: 11,
+		}
+
+		err := validate.Struct(test)
+		assert.Error(t, err)
+
+		valErrs, ok := err.(validator.ValidationErrors)
+		assert.True(t, ok)
+
+		result := formatValidationErrors(valErrs)
+		expected := "Field 'Field1' failed validation: required (condition: )\n" +
+			"Field 'Field2' failed validation: max (condition: 10)"
+		assert.Equal(t, expected, result)
+	})
+
+	t.Run("test various validation rules", func(t *testing.T) {
+		type ComplexStruct struct {
+			Email    string `validate:"required,email"`
+			Age      int    `validate:"required,min=18"`
+			Password string `validate:"required,min=8"`
+		}
+
+		test := ComplexStruct{
+			Email:    "invalid-email",
+			Age:      15,
+			Password: "123",
+		}
+
+		err := validate.Struct(test)
+		assert.Error(t, err)
+
+		valErrs, ok := err.(validator.ValidationErrors)
+		assert.True(t, ok)
+
+		result := formatValidationErrors(valErrs)
+		assert.Contains(t, result, "Field 'Email' failed validation: email")
+		assert.Contains(t, result, "Field 'Age' failed validation: min (condition: 18)")
+		assert.Contains(t, result, "Field 'Password' failed validation: min (condition: 8)")
+	})
+}
+
+func TestValidateConfig(t *testing.T) {
+	t.Run("valid config", func(t *testing.T) {
+		config := &Config{
+			Targets: []*Target{
+				{
+					Host:     "localhost",
+					User:     "testuser",
+					Password: "secret",
+				},
+			},
+			Jobs: []*Job{
+				{
+					Name: "test-job",
+					Steps: []*Step{
+						{Run: "echo 'test'"},
+					},
+				},
+			},
+		}
+
+		err := validateConfig(config)
+		assert.NoError(t, err)
+	})
+
+	t.Run("missing required fields", func(t *testing.T) {
+		config := &Config{
+			Targets: []*Target{
+				{
+					Host: "localhost",
+					// Missing User and Password/PrivateKey
+				},
+			},
+			Jobs: []*Job{
+				{
+					Name:  "test-job",
+					Steps: []*Step{}, // Empty steps
+				},
+			},
+		}
+
+		err := validateConfig(config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Field 'User' failed validation: required")
+	})
+
+	t.Run("invalid host", func(t *testing.T) {
+		config := &Config{
+			Targets: []*Target{
+				{
+					Host:     "invalid@host",
+					User:     "testuser",
+					Password: "secret",
+				},
+			},
+			Jobs: []*Job{
+				{
+					Steps: []*Step{
+						{Run: "echo 'test'"},
+					},
+				},
+			},
+		}
+
+		err := validateConfig(config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Field 'Host' failed validation: hostname|ip")
+	})
+
+	t.Run("invalid port", func(t *testing.T) {
+		config := &Config{
+			Targets: []*Target{
+				{
+					Host:     "localhost",
+					User:     "testuser",
+					Password: "secret",
+					Port:     70000,
+				},
+			},
+			Jobs: []*Job{
+				{
+					Steps: []*Step{
+						{Run: "echo 'test'"},
+					},
+				},
+			},
+		}
+
+		err := validateConfig(config)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "Field 'Port' failed validation: max")
+	})
+}
+
+func TestLoadCmdConfig(t *testing.T) {
+	// Determine shell command and script extension based on OS
+	var shell, shellArg, scriptExt string
+	if runtime.GOOS == "windows" {
+		shell = "cmd"
+		shellArg = "/C"
+		scriptExt = ".bat"
+	} else {
+		shell = "sh"
+		shellArg = "-c"
+		scriptExt = ".sh"
+	}
+
+	t.Run("successful command execution", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "cmdtest")
+		assert.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		var scriptContent string
+		if runtime.GOOS == "windows" {
+			scriptContent = `@echo {"targets":[{"host":"localhost","user":"test","password":"pass"}],"jobs":[{"name":"test","steps":[{"run":"echo hello"}]}]}`
+		} else {
+			scriptContent = `echo '{"targets":[{"host":"localhost","user":"test","password":"pass"}],"jobs":[{"name":"test","steps":[{"run":"echo hello"}]}]}'`
+		}
+
+		scriptPath := filepath.Join(tmpDir, "test"+scriptExt)
+		err = os.WriteFile(scriptPath, []byte(scriptContent), 0755)
+		assert.NoError(t, err)
+
+		config, err := loadCmdConfig(tmpDir, shell, shellArg, scriptPath)
+		assert.NoError(t, err)
+		assert.NotNil(t, config)
+		assert.Len(t, config.Targets, 1)
+		assert.Equal(t, "localhost", config.Targets[0].Host)
+		assert.Len(t, config.Jobs, 1)
+		assert.Equal(t, "test", config.Jobs[0].Name)
+	})
+
+	t.Run("command execution error", func(t *testing.T) {
+		config, err := loadCmdConfig("", "nonexistentcommand")
+		assert.Error(t, err)
+		assert.Nil(t, config)
+	})
+
+	t.Run("invalid JSON output", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "cmdtest")
+		assert.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		var scriptContent string
+		if runtime.GOOS == "windows" {
+			scriptContent = "@echo invalid json"
+		} else {
+			scriptContent = "echo 'invalid json'"
+		}
+
+		scriptPath := filepath.Join(tmpDir, "invalid"+scriptExt)
+		err = os.WriteFile(scriptPath, []byte(scriptContent), 0755)
+		assert.NoError(t, err)
+
+		config, err := loadCmdConfig(tmpDir, shell, shellArg, scriptPath)
+		assert.Error(t, err)
+		assert.Nil(t, config)
+		assert.Contains(t, err.Error(), "failed to parse config output")
+	})
+
+	t.Run("empty output", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "cmdtest")
+		assert.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		scriptPath := filepath.Join(tmpDir, "empty"+scriptExt)
+		err = os.WriteFile(scriptPath, []byte(""), 0755)
+		assert.NoError(t, err)
+
+		config, err := loadCmdConfig(tmpDir, shell, shellArg, scriptPath)
+		assert.Error(t, err)
+		assert.Nil(t, config)
+		assert.Contains(t, err.Error(), "invalid output config cmd output")
+	})
+}
+
+func TestLoadJavaScriptConfig(t *testing.T) {
+	t.Run("successful JavaScript config", func(t *testing.T) {
+		// Create a temporary directory
+		tmpDir, err := os.MkdirTemp("", "jsconfig")
+		assert.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		// Create test JavaScript file that exports valid config
+		jsContent := `
+export default {
+    targets: [{
+        host: "localhost",
+        user: "test",
+        password: "pass"
+    }],
+    jobs: [{
+        name: "test",
+        steps: [{
+            run: "echo hello"
+        }]
+    }]
+};`
+		jsPath := filepath.Join(tmpDir, "config.js")
+		err = os.WriteFile(jsPath, []byte(jsContent), 0755)
+		assert.NoError(t, err)
+
+		// Write package.json for ES modules support
+		pkgContent := `{"type": "module"}`
+		err = os.WriteFile(filepath.Join(tmpDir, "package.json"), []byte(pkgContent), 0644)
+		assert.NoError(t, err)
+
+		config, err := loadJavaScriptConfig(jsPath)
+		assert.NoError(t, err)
+		assert.NotNil(t, config)
+		assert.Len(t, config.Targets, 1)
+		assert.Equal(t, "localhost", config.Targets[0].Host)
+		assert.Len(t, config.Jobs, 1)
+		assert.Equal(t, "test", config.Jobs[0].Name)
+	})
+
+	t.Run("invalid JavaScript syntax", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "jsconfig")
+		assert.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		jsContent := `
+export default {
+    invalid syntax
+};`
+		jsPath := filepath.Join(tmpDir, "invalid.js")
+		err = os.WriteFile(jsPath, []byte(jsContent), 0755)
+		assert.NoError(t, err)
+
+		config, err := loadJavaScriptConfig(jsPath)
+		assert.Error(t, err)
+		assert.Nil(t, config)
+	})
+
+	t.Run("invalid config structure", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "jsconfig")
+		assert.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		jsContent := `
+export default {
+    invalid: "config"
+};`
+		jsPath := filepath.Join(tmpDir, "invalid-config.js")
+		err = os.WriteFile(jsPath, []byte(jsContent), 0755)
+		assert.NoError(t, err)
+
+		config, err := loadJavaScriptConfig(jsPath)
+		assert.Error(t, err)
+		assert.Nil(t, config)
+	})
+
+	t.Run("non-existent file", func(t *testing.T) {
+		config, err := loadJavaScriptConfig("nonexistent.js")
+		assert.Error(t, err)
+		assert.Nil(t, config)
+	})
+}
+
+func TestLoadTypeScriptConfig(t *testing.T) {
+	t.Run("successful TypeScript config", func(t *testing.T) {
+		// Create a temporary directory
+		tmpDir, err := os.MkdirTemp("", "tsconfig")
+		assert.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		// Create test TypeScript file that exports valid config
+		tsContent := `
+interface Target {
+    host: string;
+    user: string;
+    password: string;
+}
+
+interface Job {
+    name: string;
+    steps: { run: string }[];
+}
+
+interface Config {
+    targets: Target[];
+    jobs: Job[];
+}
+
+export default {
+    targets: [{
+        host: "localhost",
+        user: "test",
+        password: "pass"
+    }],
+    jobs: [{
+        name: "test",
+        steps: [{
+            run: "echo hello"
+        }]
+    }]
+} as Config;`
+
+		tsPath := filepath.Join(tmpDir, "config.ts")
+		err = os.WriteFile(tsPath, []byte(tsContent), 0644)
+		assert.NoError(t, err)
+
+		config, err := loadTypeScriptConfig(tsPath)
+		assert.NoError(t, err)
+		assert.NotNil(t, config)
+		assert.Len(t, config.Targets, 1)
+		assert.Equal(t, "localhost", config.Targets[0].Host)
+		assert.Len(t, config.Jobs, 1)
+		assert.Equal(t, "test", config.Jobs[0].Name)
+	})
+
+	t.Run("invalid TypeScript syntax", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "tsconfig")
+		assert.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		tsContent := `
+export default {
+    invalid syntax
+};`
+		tsPath := filepath.Join(tmpDir, "invalid.ts")
+		err = os.WriteFile(tsPath, []byte(tsContent), 0644)
+		assert.NoError(t, err)
+
+		config, err := loadTypeScriptConfig(tsPath)
+		assert.Error(t, err)
+		assert.Nil(t, config)
+	})
+
+	t.Run("non-existent file", func(t *testing.T) {
+		config, err := loadTypeScriptConfig("nonexistent.ts")
+		assert.Error(t, err)
+		assert.Nil(t, config)
+	})
+
+	t.Run("async function export", func(t *testing.T) {
+		tmpDir, err := os.MkdirTemp("", "tsconfig")
+		assert.NoError(t, err)
+		defer os.RemoveAll(tmpDir)
+
+		tsContent := `
+export default async function() {
+    return {
+        targets: [{
+            host: "localhost",
+            user: "test",
+            password: "pass"
+        }],
+        jobs: [{
+            name: "test",
+            steps: [{
+                run: "echo hello"
+            }]
+        }]
+    };
+}`
+		tsPath := filepath.Join(tmpDir, "async-config.ts")
+		err = os.WriteFile(tsPath, []byte(tsContent), 0644)
+		assert.NoError(t, err)
+
+		config, err := loadTypeScriptConfig(tsPath)
+		assert.NoError(t, err)
+		assert.NotNil(t, config)
+		assert.Len(t, config.Targets, 1)
+		assert.Equal(t, "localhost", config.Targets[0].Host)
+		assert.Len(t, config.Jobs, 1)
+		assert.Equal(t, "test", config.Jobs[0].Name)
+	})
 }
