@@ -9,16 +9,32 @@ import (
 
 	"github.com/nickalie/nship/internal/config"
 	"github.com/nickalie/nship/internal/core/job"
+	"github.com/nickalie/nship/internal/core/target"
 	"github.com/nickalie/nship/internal/infrastructure/env"
 	"github.com/nickalie/nship/internal/infrastructure/ssh"
 )
 
+// EnvLoader defines the interface for loading environment variables
+type EnvLoader interface {
+	Load(path, vaultPassword string) error
+}
+
+// ConfigLoader defines the interface for loading configuration
+type ConfigLoader interface {
+	Load(configPath string) (*config.Config, error)
+}
+
+// JobService defines the interface for job execution
+type JobService interface {
+	ExecuteJobs(targets []*target.Target, jobs []*job.Job) error
+}
+
 // App represents the main application structure that handles
 // configuration loading and job execution.
 type App struct {
-	envLoader    env.Loader
-	configLoader config.Loader
-	jobService   *job.Service
+	envLoader    EnvLoader
+	configLoader ConfigLoader
+	jobService   JobService
 }
 
 // NewApp creates and returns a new App instance with default implementations
@@ -29,6 +45,15 @@ func NewApp() *App {
 	clientFactory := ssh.NewClientFactory()
 	jobService := job.NewService(clientFactory)
 
+	return &App{
+		envLoader:    envLoader,
+		configLoader: configLoader,
+		jobService:   jobService,
+	}
+}
+
+// NewAppWithDeps creates and returns a new App instance with custom dependencies
+func NewAppWithDeps(envLoader EnvLoader, configLoader ConfigLoader, jobService JobService) *App {
 	return &App{
 		envLoader:    envLoader,
 		configLoader: configLoader,
@@ -69,9 +94,19 @@ func (a *App) Run(configPath, jobName string, envPaths []string, vaultPassword s
 	return nil
 }
 
-// GetJobService returns the job service
-func (a *App) GetJobService() *job.Service {
+// GetJobService returns the job service for testing
+func (a *App) GetJobService() JobService {
 	return a.jobService
+}
+
+// GetConfigLoader returns the config loader for testing
+func (a *App) GetConfigLoader() ConfigLoader {
+	return a.configLoader
+}
+
+// GetEnvLoader returns the environment loader for testing
+func (a *App) GetEnvLoader() EnvLoader {
+	return a.envLoader
 }
 
 // loadEnvironments loads all environment files

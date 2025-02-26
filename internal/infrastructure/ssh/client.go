@@ -27,13 +27,52 @@ type SSHClient struct {
 
 // ClientFactory implements job.ClientFactory using SSH
 type ClientFactory struct {
-	fileSystem fs.FileSystem
+	fileSystem    fs.FileSystem
+	sshDialer     SSHDialer
+	sftpConnector SFTPConnector
 }
 
-// NewClientFactory creates a new SSH client factory
+// SSHDialer defines an interface for creating SSH connections
+type SSHDialer interface {
+	Dial(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error)
+}
+
+// SFTPConnector defines an interface for creating SFTP clients
+type SFTPConnector interface {
+	NewClient(sshClient *ssh.Client) (*sftp.Client, error)
+}
+
+// DefaultSSHDialer implements SSHDialer using ssh.Dial
+type DefaultSSHDialer struct{}
+
+// Dial creates a new SSH connection
+func (d *DefaultSSHDialer) Dial(network, addr string, config *ssh.ClientConfig) (*ssh.Client, error) {
+	return ssh.Dial(network, addr, config)
+}
+
+// DefaultSFTPConnector implements SFTPConnector using sftp.NewClient
+type DefaultSFTPConnector struct{}
+
+// NewClient creates a new SFTP client
+func (c *DefaultSFTPConnector) NewClient(sshClient *ssh.Client) (*sftp.Client, error) {
+	return sftp.NewClient(sshClient)
+}
+
+// NewClientFactory creates a new SSH client factory with default implementations
 func NewClientFactory() *ClientFactory {
 	return &ClientFactory{
-		fileSystem: fs.NewFileSystem(),
+		fileSystem:    fs.NewFileSystem(),
+		sshDialer:     &DefaultSSHDialer{},
+		sftpConnector: &DefaultSFTPConnector{},
+	}
+}
+
+// NewClientFactoryWithDeps creates a new SSH client factory with custom dependencies
+func NewClientFactoryWithDeps(fs fs.FileSystem, dialer SSHDialer, connector SFTPConnector) *ClientFactory {
+	return &ClientFactory{
+		fileSystem:    fs,
+		sshDialer:     dialer,
+		sftpConnector: connector,
 	}
 }
 
@@ -46,7 +85,7 @@ func (f *ClientFactory) NewClient(tgt *target.Target) (job.Client, error) {
 		Timeout:         5 * time.Second,
 	}
 
-	sshClient, err := ssh.Dial("tcp", fmt.Sprintf("%s:%d", tgt.Host, tgt.GetPort()), sshConfig)
+	sshClient, err := f.sshDialer.Dial("tcp", fmt.Sprintf("%s:%d", tgt.Host, tgt.GetPort()), sshConfig)
 	if err != nil {
 		return nil, &job.ConnectionError{
 			Target: tgt.GetName(),
@@ -54,7 +93,7 @@ func (f *ClientFactory) NewClient(tgt *target.Target) (job.Client, error) {
 		}
 	}
 
-	sftpClient, err := sftp.NewClient(sshClient)
+	sftpClient, err := f.sftpConnector.NewClient(sshClient)
 	if err != nil {
 		sshClient.Close()
 		return nil, fmt.Errorf("SFTP connection failed: %w", err)
@@ -69,6 +108,17 @@ func (f *ClientFactory) NewClient(tgt *target.Target) (job.Client, error) {
 		copier:     *copier,
 		target:     tgt,
 	}, nil
+}
+
+// NewSSHClientWithDeps creates a new SSH client with provided dependencies
+// This is primarily used for testing
+func NewSSHClientWithDeps(sshClient SSHClientInterface, sftpClient SFTPClientInterface, copier fs.Copier, tgt *target.Target) *SSHClient {
+	return &SSHClient{
+		sshClient:  sshClient,
+		sftpClient: sftpClient,
+		copier:     copier,
+		target:     tgt,
+	}
 }
 
 // ExecuteStep implements the Client interface by executing a single deployment step.

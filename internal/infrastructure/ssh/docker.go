@@ -68,7 +68,12 @@ func (b *DockerCommandBuilder) buildDockerCreateCommand() string {
 	args = append(args, b.appendDockerArgs("--network", b.docker.Networks)...)
 
 	args = append(args, b.docker.Image)
-	args = append(args, b.docker.Commands...)
+
+	// If there are commands, join them with spaces and quote the entire command string
+	if len(b.docker.Commands) > 0 {
+		command := strings.Join(b.docker.Commands, " ")
+		args = append(args, fmt.Sprintf("%q", command))
+	}
 
 	return strings.Join(args, " ")
 }
