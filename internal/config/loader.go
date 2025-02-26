@@ -1,6 +1,8 @@
 package config
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -8,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/go-playground/validator/v10"
@@ -16,6 +19,7 @@ import (
 
 // CommandRunner is an interface for executing commands
 type CommandRunner func(dir string, args ...string) ([]byte, error)
+
 // Loader defines the interface for loading configuration.
 type Loader interface {
 	Load(configPath string) (*Config, error)
@@ -50,16 +54,66 @@ func NewLoader() Loader {
 	return loader
 }
 
-// execCommand executes a command and returns its output
+// execCommand executes a command and returns its output,
+// streaming the output to stdout/stderr in real time.
 func execCommand(dir string, args ...string) ([]byte, error) {
 	cmd := exec.Command(args[0], args[1:]...)
 	cmd.Dir = dir
 
-	output, err := cmd.CombinedOutput()
+	// Create pipes for stdout and stderr
+	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		return nil, fmt.Errorf("%w\n%s", err, string(output))
+		return nil, fmt.Errorf("failed to create stdout pipe: %w", err)
 	}
-	return output, nil
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create stderr pipe: %w", err)
+	}
+
+	// Buffer to collect all output for return
+	var outputBuffer bytes.Buffer
+
+	// Create wait groups to ensure all goroutines complete before we finish
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	// Start the command
+	if err := cmd.Start(); err != nil {
+		return nil, fmt.Errorf("failed to start command: %w", err)
+	}
+
+	// Read stdout in a goroutine and print to console while also collecting for return
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		for scanner.Scan() {
+			line := scanner.Text()
+			fmt.Println(line)
+			outputBuffer.WriteString(line + "\n")
+		}
+	}()
+	wg.Done()
+
+	// Read stderr in a goroutine
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			line := scanner.Text()
+			fmt.Fprintln(os.Stderr, line)
+			outputBuffer.WriteString(line + "\n")
+		}
+		wg.Done()
+	}()
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Wait for the command to complete
+	err = cmd.Wait()
+	if err != nil {
+		return outputBuffer.Bytes(), fmt.Errorf("%w\n%s", err, outputBuffer.String())
+	}
+
+	return outputBuffer.Bytes(), nil
 }
 
 // Load loads and validates configuration from the specified path.
@@ -202,10 +256,10 @@ func (l *DefaultLoader) loadGolangConfig(configPath string) (*Config, error) {
 
 // loadCmdConfig loads configuration by executing a command
 func (l *DefaultLoader) loadCmdConfig(dir string, args ...string) (*Config, error) {
-    output, err := l.cmdRunner(dir, args...)
-    if err != nil {
-        return nil, fmt.Errorf("%w\n%s", err, string(output))
-    }
+	output, err := l.cmdRunner(dir, args...)
+	if err != nil {
+		return nil, fmt.Errorf("%w\n%s", err, string(output))
+	}
 
 	parts := strings.Split(string(output), "\n")
 

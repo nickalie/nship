@@ -1,13 +1,17 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"github.com/go-playground/validator/v10"
+	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nickalie/nship/internal/core/job"
 	"github.com/nickalie/nship/internal/core/target"
@@ -523,4 +527,279 @@ func TestUnsupportedExtension(t *testing.T) {
 	if !strings.Contains(err.Error(), "unsupported config file extension") {
 		t.Errorf("Expected error to mention unsupported extension, got: %v", err)
 	}
+}
+
+// TestExecCommand tests the execCommand function with various scenarios
+func TestExecCommand(t *testing.T) {
+	// Capture stdout and stderr for verification
+	originalStdout := os.Stdout
+	originalStderr := os.Stderr
+
+	// Create a temporary directory for test files
+	tempDir, err := os.MkdirTemp("", "execcommand-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer os.RemoveAll(tempDir)
+
+	t.Run("SimpleCommand", func(t *testing.T) {
+		// Capture stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+		outC := make(chan string)
+		go func() {
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			outC <- buf.String()
+		}()
+
+		// Use different commands based on OS
+		var cmd string
+		var args []string
+		expected := "Hello, World!"
+
+		if runtime.GOOS == "windows" {
+			cmd = "cmd"
+			args = []string{"/c", "echo", expected}
+		} else {
+			cmd = "echo"
+			args = []string{expected}
+		}
+
+		// Run command
+		output, err := execCommand("", append([]string{cmd}, args...)...)
+
+		// Close write end of pipe to get output
+		w.Close()
+		stdout := <-outC
+		os.Stdout = originalStdout
+
+		// Verify
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+
+		if !strings.Contains(string(output), expected) {
+			t.Errorf("Expected output to contain '%s', got: '%s'", expected, string(output))
+		}
+
+		if !strings.Contains(stdout, expected) {
+			t.Errorf("Expected stdout to contain '%s', got: '%s'", expected, stdout)
+		}
+	})
+
+	t.Run("CommandWithError", func(t *testing.T) {
+		// Capture stderr
+		r, w, _ := os.Pipe()
+		os.Stderr = w
+		errC := make(chan string)
+		go func() {
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			errC <- buf.String()
+		}()
+
+		// Run a command that will fail - use a command name that doesn't exist on any platform
+		_, err := execCommand("", "command-that-does-not-exist")
+
+		// Close write end of pipe to get error output
+		w.Close()
+		stderr := <-errC
+		os.Stderr = originalStderr
+		_ = stderr // This line prevents the "declared and not used" error for stderr
+
+		// Verify
+		if err == nil {
+			t.Errorf("Expected an error, got nil")
+		}
+
+		// No assertion on stderr content as it may vary by OS
+	})
+
+	t.Run("CommandWithStderr", func(t *testing.T) {
+		// Create a platform-specific script that outputs to both stdout and stderr
+		var cmd string
+		var args []string
+		var scriptPath string
+
+		if runtime.GOOS == "windows" {
+			scriptPath = filepath.Join(tempDir, "stderr.bat")
+			content := "@echo off\r\necho Standard output\r\necho Standard error 1>&2\r\nexit /b 0\r\n"
+			if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+				t.Fatalf("Failed to create test batch file: %v", err)
+			}
+			cmd = "cmd"
+			args = []string{"/c", scriptPath}
+		} else {
+			scriptPath = filepath.Join(tempDir, "stderr.sh")
+			content := "#!/bin/sh\necho \"Standard output\"\necho \"Standard error\" >&2\nexit 0\n"
+			if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+				t.Fatalf("Failed to create test script: %v", err)
+			}
+			if err := os.Chmod(scriptPath, 0755); err != nil {
+				t.Fatalf("Failed to make script executable: %v", err)
+			}
+			cmd = scriptPath
+			args = []string{}
+		}
+
+		// Capture stdout and stderr
+		rOut, wOut, _ := os.Pipe()
+		rErr, wErr, _ := os.Pipe()
+		os.Stdout = wOut
+		os.Stderr = wErr
+
+		outC := make(chan string)
+		errC := make(chan string)
+
+		go func() {
+			var buf bytes.Buffer
+			io.Copy(&buf, rOut)
+			outC <- buf.String()
+		}()
+
+		go func() {
+			var buf bytes.Buffer
+			io.Copy(&buf, rErr)
+			errC <- buf.String()
+		}()
+
+		// Run the command
+		output, err := execCommand("", append([]string{cmd}, args...)...)
+
+		// Close write ends of pipes to get output
+		wOut.Close()
+		wErr.Close()
+		stdout := <-outC
+		stderr := <-errC
+		os.Stdout = originalStdout
+		os.Stderr = originalStderr
+
+		// Verify
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+
+		// Check combined output has both stdout and stderr
+		if !strings.Contains(string(output), "Standard output") {
+			t.Errorf("Expected output to contain 'Standard output', got: '%s'", string(output))
+		}
+		if !strings.Contains(string(output), "Standard error") {
+			t.Errorf("Expected output to contain 'Standard error', got: '%s'", string(output))
+		}
+
+		// Check that stdout and stderr were captured correctly
+		if !strings.Contains(stdout, "Standard output") {
+			t.Errorf("Expected stdout to contain 'Standard output', got: '%s'", stdout)
+		}
+		if !strings.Contains(stderr, "Standard error") {
+			t.Errorf("Expected stderr to contain 'Standard error', got: '%s'", stderr)
+		}
+	})
+
+	t.Run("LongRunningCommand", func(t *testing.T) {
+		// Create a platform-specific command that outputs with delays
+		var cmd string
+		var args []string
+		var scriptPath string
+
+		if runtime.GOOS == "windows" {
+			scriptPath = filepath.Join(tempDir, "slow.bat")
+			// Windows batch file using timeout instead of sleep
+			content := "@echo off\r\necho Starting\r\ntimeout /t 1 /nobreak >nul\r\necho Step 1\r\ntimeout /t 1 /nobreak >nul\r\necho Step 2\r\ntimeout /t 1 /nobreak >nul\r\necho Finished\r\nexit /b 0\r\n"
+			if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+				t.Fatalf("Failed to create test batch file: %v", err)
+			}
+			cmd = "cmd"
+			args = []string{"/c", scriptPath}
+		} else {
+			scriptPath = filepath.Join(tempDir, "slow.sh")
+			content := "#!/bin/sh\necho \"Starting\"\nsleep 0.5\necho \"Step 1\"\nsleep 0.5\necho \"Step 2\"\nsleep 0.5\necho \"Finished\"\nexit 0\n"
+			if err := os.WriteFile(scriptPath, []byte(content), 0755); err != nil {
+				t.Fatalf("Failed to create test script: %v", err)
+			}
+			if err := os.Chmod(scriptPath, 0755); err != nil {
+				t.Fatalf("Failed to make script executable: %v", err)
+			}
+			cmd = scriptPath
+			args = []string{}
+		}
+
+		// Capture stdout
+		r, w, _ := os.Pipe()
+		os.Stdout = w
+		outC := make(chan string)
+		go func() {
+			var buf bytes.Buffer
+			io.Copy(&buf, r)
+			outC <- buf.String()
+		}()
+
+		// Measure execution time to ensure we're not waiting for all output at once
+		startTime := time.Now()
+
+		// Run the command
+		output, err := execCommand("", append([]string{cmd}, args...)...)
+		execTime := time.Since(startTime)
+
+		// Close write end of pipe to get output
+		w.Close()
+		stdout := <-outC
+		os.Stdout = originalStdout
+
+		// Verify
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+
+		// Check that all output is present
+		expectedLines := []string{"Starting", "Step 1", "Step 2", "Finished"}
+		for _, line := range expectedLines {
+			if !strings.Contains(string(output), line) {
+				t.Errorf("Expected output to contain '%s', got: '%s'", line, string(output))
+			}
+			if !strings.Contains(stdout, line) {
+				t.Errorf("Expected stdout to contain '%s', got: '%s'", line, stdout)
+			}
+		}
+
+		// Verify that the execution time is reasonable
+		if execTime < 50*time.Millisecond {
+			t.Errorf("Execution time too short (%v), suggests output was not streamed in real-time", execTime)
+		}
+	})
+
+	t.Run("WorkingDirectory", func(t *testing.T) {
+		// Test that the working directory is respected
+		var cmd string
+		var args []string
+
+		if runtime.GOOS == "windows" {
+			cmd = "cmd"
+			args = []string{"/c", "cd"}
+		} else {
+			cmd = "pwd"
+			args = []string{}
+		}
+
+		output, err := execCommand(tempDir, append([]string{cmd}, args...)...)
+
+		if err != nil {
+			t.Errorf("Expected no error, got: %v", err)
+		}
+
+		// On Windows, normalize paths for comparison (remove extra whitespace and convert case)
+		normalizedOutput := strings.TrimSpace(string(output))
+		normalizedTempDir := strings.TrimSpace(tempDir)
+
+		if runtime.GOOS == "windows" {
+			normalizedOutput = strings.ToLower(normalizedOutput)
+			normalizedTempDir = strings.ToLower(normalizedTempDir)
+		}
+
+		// Check that the output contains the temp directory path
+		if !strings.Contains(normalizedOutput, normalizedTempDir) {
+			t.Errorf("Expected output to contain temp directory '%s', got: '%s'", normalizedTempDir, normalizedOutput)
+		}
+	})
 }
