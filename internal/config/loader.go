@@ -16,8 +16,6 @@ import (
 
 // CommandRunner is an interface for executing commands
 type CommandRunner func(dir string, args ...string) ([]byte, error)
-
-// Loader defines the interface for loading configuration
 // Loader defines the interface for loading configuration.
 type Loader interface {
 	Load(configPath string) (*Config, error)
@@ -203,10 +201,10 @@ func (l *DefaultLoader) loadGolangConfig(configPath string) (*Config, error) {
 }
 
 // loadCmdConfig loads configuration by executing a command
-	output, err := l.cmdRunner(dir, args...)
-	if err != nil {
-		return nil, fmt.Errorf("%w\n%s", err, string(output))
-	}
+func (l *DefaultLoader) loadCmdConfig(dir string, args ...string) (*Config, error) {
+    output, err := l.cmdRunner(dir, args...)
+    if err != nil {
+        return nil, fmt.Errorf("%w\n%s", err, string(output))
     }
 
 	parts := strings.Split(string(output), "\n")
