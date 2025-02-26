@@ -14,6 +14,10 @@ import (
 	"gopkg.in/yaml.v2"
 )
 
+// CommandRunner is an interface for executing commands
+type CommandRunner func(dir string, args ...string) ([]byte, error)
+
+// Loader defines the interface for loading configuration
 // Loader defines the interface for loading configuration.
 type Loader interface {
 	Load(configPath string) (*Config, error)
@@ -23,6 +27,7 @@ type Loader interface {
 type DefaultLoader struct {
 	validator *validator.Validate
 	loaders   map[string]func(string) (*Config, error)
+	cmdRunner CommandRunner
 }
 
 // NewLoader creates a new configuration loader with default implementations.
@@ -31,6 +36,9 @@ func NewLoader() Loader {
 	loader := &DefaultLoader{
 		validator: validate,
 		loaders:   make(map[string]func(string) (*Config, error)),
+		cmdRunner: func(dir string, args ...string) ([]byte, error) {
+			return execCommand(dir, args...)
+		},
 	}
 
 	// Register default loaders
@@ -42,6 +50,18 @@ func NewLoader() Loader {
 	loader.loaders[".go"] = loader.loadGolangConfig
 
 	return loader
+}
+
+// execCommand executes a command and returns its output
+func execCommand(dir string, args ...string) ([]byte, error) {
+	cmd := exec.Command(args[0], args[1:]...)
+	cmd.Dir = dir
+
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return nil, fmt.Errorf("%w\n%s", err, string(output))
+	}
+	return output, nil
 }
 
 // Load loads and validates configuration from the specified path.
@@ -179,19 +199,16 @@ func (l *DefaultLoader) loadJavaScriptConfig(configPath string) (*Config, error)
 
 // loadGolangConfig loads configuration from Go file
 func (l *DefaultLoader) loadGolangConfig(configPath string) (*Config, error) {
-	return l.loadCmdConfig("", "go", "run", configPath)
+	return l.loadCmdConfig("./", "go", "run", configPath)
 }
 
 // loadCmdConfig loads configuration by executing a command
-func (l *DefaultLoader) loadCmdConfig(dir string, args ...string) (*Config, error) {
-	cmd := exec.Command(args[0], args[1:]...)
-	cmd.Dir = dir
-
-	output, err := cmd.CombinedOutput()
+	output, err := l.cmdRunner(dir, args...)
 	if err != nil {
 		return nil, fmt.Errorf("%w\n%s", err, string(output))
 	}
 
+    
 	parts := strings.Split(string(output), "\n")
 
 	if len(parts) < 2 {

@@ -1,12 +1,13 @@
 package config
 
 import (
+	"encoding/json"
+	"fmt"
+	"github.com/go-playground/validator/v10"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/go-playground/validator/v10"
 
 	"github.com/nickalie/nship/internal/core/job"
 	"github.com/nickalie/nship/internal/core/target"
@@ -184,6 +185,262 @@ targets:
 	}
 	if !strings.Contains(result, "host: ") {
 		t.Errorf("Expected 'host: ' after replacement, got %s", result)
+	}
+}
+
+// setupTestLoader creates a test loader with a mock command runner
+func setupTestLoader(cmdOutput []byte, cmdErr error) *DefaultLoader {
+	validate := validator.New()
+	loader := &DefaultLoader{
+		validator: validate,
+		loaders:   make(map[string]func(string) (*Config, error)),
+		cmdRunner: func(dir string, args ...string) ([]byte, error) {
+			return cmdOutput, cmdErr
+		},
+	}
+
+	// Register default loaders
+	loader.loaders[".yaml"] = loader.loadYAMLConfig
+	loader.loaders[".yml"] = loader.loadYAMLConfig
+	loader.loaders[".ts"] = loader.loadTypeScriptConfig
+	loader.loaders[".js"] = loader.loadJavaScriptConfig
+	loader.loaders[".mjs"] = loader.loadJavaScriptConfig
+	loader.loaders[".go"] = loader.loadGolangConfig
+
+	return loader
+}
+
+// mockValidOutput creates mock output for command execution with valid config
+func mockValidOutput(config *Config) []byte {
+	// Create a valid config output as would be returned by a script
+	jsonBytes, _ := json.Marshal(config)
+	return []byte(string(jsonBytes) + "\n")
+}
+
+func TestLoadJavaScriptConfig(t *testing.T) {
+	// Create a simple valid config for testing
+	validConfig := &Config{
+		Targets: []*target.Target{
+			{
+				Name:     "test-server",
+				Host:     "test.example.com",
+				User:     "testuser",
+				Password: "testpass",
+			},
+		},
+		Jobs: []*job.Job{
+			{
+				Name: "test-job",
+				Steps: []*job.Step{
+					{Run: "echo 'Hello, world!'"},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name        string
+		cmdOutput   []byte
+		cmdErr      error
+		expectError bool
+	}{
+		{
+			name:        "Valid JavaScript Config",
+			cmdOutput:   mockValidOutput(validConfig),
+			cmdErr:      nil,
+			expectError: false,
+		},
+		{
+			name:        "Command Error",
+			cmdOutput:   []byte("Error: Cannot find module"),
+			cmdErr:      fmt.Errorf("exit status 1"),
+			expectError: true,
+		},
+		{
+			name:        "Invalid JSON Output",
+			cmdOutput:   []byte("not-json\n"),
+			cmdErr:      nil,
+			expectError: true,
+		},
+		{
+			name:        "Empty Output",
+			cmdOutput:   []byte(""),
+			cmdErr:      nil,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			loader := setupTestLoader(tt.cmdOutput, tt.cmdErr)
+
+			// Create a temporary JS file path (won't be accessed, just used for name)
+			tmpDir, _ := os.MkdirTemp("", "js-test")
+			defer os.RemoveAll(tmpDir)
+			jsPath := filepath.Join(tmpDir, "config.js")
+
+			config, err := loader.loadJavaScriptConfig(jsPath)
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error but got: %v", err)
+				}
+
+				// Verify config was loaded correctly
+				if config.Targets[0].Host != validConfig.Targets[0].Host {
+					t.Errorf("Expected host %s, got %s", validConfig.Targets[0].Host, config.Targets[0].Host)
+				}
+
+				if config.Jobs[0].Name != validConfig.Jobs[0].Name {
+					t.Errorf("Expected job name %s, got %s", validConfig.Jobs[0].Name, config.Jobs[0].Name)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadTypeScriptConfig(t *testing.T) {
+	// Create a simple valid config for testing
+	validConfig := &Config{
+		Targets: []*target.Target{
+			{
+				Name:     "ts-server",
+				Host:     "typescript.example.com",
+				User:     "tsuser",
+				Password: "tspass",
+			},
+		},
+		Jobs: []*job.Job{
+			{
+				Name: "ts-job",
+				Steps: []*job.Step{
+					{Run: "echo 'TypeScript Config'"},
+				},
+			},
+		},
+	}
+
+	tests := []struct {
+		name        string
+		cmdOutput   []byte
+		cmdErr      error
+		expectError bool
+	}{
+		{
+			name:        "Valid TypeScript Config",
+			cmdOutput:   mockValidOutput(validConfig),
+			cmdErr:      nil,
+			expectError: false,
+		},
+		{
+			name:        "Command Error",
+			cmdOutput:   []byte("Error: TypeScript compilation failed"),
+			cmdErr:      fmt.Errorf("exit status 1"),
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Create a temporary TS file (won't be accessed by our mock)
+			tmpDir, _ := os.MkdirTemp("", "ts-test")
+			defer os.RemoveAll(tmpDir)
+			tsPath := filepath.Join(tmpDir, "config.ts")
+
+			// Write dummy content to the file
+			err := os.WriteFile(tsPath, []byte("export default {}"), 0644)
+			if err != nil {
+				t.Fatalf("Failed to write test TS file: %v", err)
+			}
+
+			loader := setupTestLoader(tt.cmdOutput, tt.cmdErr)
+
+			// Skip actual TypeScript compilation during testing
+			oldJSLoader := loader.loaders[".js"]
+			loader.loaders[".js"] = func(path string) (*Config, error) {
+				// Instead of actually running JS, return the mock result
+				if tt.cmdErr != nil {
+					return nil, tt.cmdErr
+				}
+				// Parse the mock output
+				var config Config
+				if err := json.Unmarshal(tt.cmdOutput, &config); err != nil {
+					return nil, err
+				}
+				return &config, nil
+			}
+
+			// Run the test
+			config, err := loader.loadTypeScriptConfig(tsPath)
+
+			// Restore the original JS loader
+			loader.loaders[".js"] = oldJSLoader
+
+			if tt.expectError {
+				if err == nil {
+					t.Errorf("Expected error but got nil")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Expected no error but got: %v", err)
+				}
+
+				// Check config values
+				if config.Targets[0].Host != validConfig.Targets[0].Host {
+					t.Errorf("Expected host %s, got %s", validConfig.Targets[0].Host, config.Targets[0].Host)
+				}
+			}
+		})
+	}
+}
+
+func TestLoadGolangConfig(t *testing.T) {
+	// Create a simple valid config for testing
+	validConfig := &Config{
+		Targets: []*target.Target{
+			{
+				Name:     "go-server",
+				Host:     "golang.example.com",
+				User:     "gouser",
+				Password: "gopass",
+			},
+		},
+		Jobs: []*job.Job{
+			{
+				Name: "go-job",
+				Steps: []*job.Step{
+					{Run: "echo 'Go Config'"},
+				},
+			},
+		},
+	}
+
+	// Setup test loader with mock output
+	loader := setupTestLoader(mockValidOutput(validConfig), nil)
+
+	// Create a temporary Go file path (won't be accessed, just used for name)
+	tmpDir, _ := os.MkdirTemp("", "go-test")
+	defer os.RemoveAll(tmpDir)
+	goPath := filepath.Join(tmpDir, "config.go")
+
+	// Load the config using our mocked function
+	config, err := loader.loadGolangConfig(goPath)
+
+	// Verify results
+	if err != nil {
+		t.Errorf("Expected no error but got: %v", err)
+	}
+
+	if config.Targets[0].Host != validConfig.Targets[0].Host {
+		t.Errorf("Expected host %s, got %s", validConfig.Targets[0].Host, config.Targets[0].Host)
+	}
+
+	if config.Jobs[0].Name != validConfig.Jobs[0].Name {
+		t.Errorf("Expected job name %s, got %s", validConfig.Jobs[0].Name, config.Jobs[0].Name)
 	}
 }
 
