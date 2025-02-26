@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nickalie/ngdeploy/config"
-	"github.com/nickalie/ngdeploy/pkg/file"
+	"github.com/nickalie/nship/config"
+	"github.com/nickalie/nship/pkg/file"
 	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 )

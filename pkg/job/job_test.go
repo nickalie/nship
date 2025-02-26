@@ -4,13 +4,13 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/nickalie/ngdeploy/config"
+	"github.com/nickalie/nship/config"
 )
 
 type MockSSHClient struct {
 }
 
-func (m *MockSSHClient) ExecuteStep(step *config.Step, stepNum, totalSteps int) error {
+func (m *MockSSHClient) ExecuteStep(_ *config.Step, _, _ int) error {
 	return nil
 }
 

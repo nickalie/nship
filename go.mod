@@ -1,4 +1,4 @@
-module github.com/nickalie/ngdeploy
+module github.com/nickalie/nship
 
 go 1.23
 

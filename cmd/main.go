@@ -10,8 +10,8 @@ import (
 	"syscall"
 
 	"github.com/joho/godotenv"
-	"github.com/nickalie/ngdeploy/config"
-	"github.com/nickalie/ngdeploy/pkg/job"
+	"github.com/nickalie/nship/config"
+	"github.com/nickalie/nship/pkg/job"
 	"github.com/sosedoff/ansible-vault-go"
 	"golang.org/x/term"
 )

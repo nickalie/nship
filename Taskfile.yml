@@ -4,7 +4,7 @@ tasks:
   build:
     dir: cmd
     cmds:
-      - go build -o ../bin/ngdeploy.exe
+      - go build -o ../bin/nship.exe
   lint:
     cmd: golangci-lint run ./...
   lint-fix:
