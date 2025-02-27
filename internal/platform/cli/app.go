@@ -11,6 +11,7 @@ import (
 	"github.com/nickalie/nship/internal/core/job"
 	"github.com/nickalie/nship/internal/core/target"
 	"github.com/nickalie/nship/internal/infrastructure/env"
+	"github.com/nickalie/nship/internal/infrastructure/fs"
 	"github.com/nickalie/nship/internal/infrastructure/ssh"
 )
 
@@ -52,6 +53,21 @@ func NewApp() *App {
 	}
 }
 
+// NewAppWithSkipUnchanged creates a new App instance with skip unchanged option
+func NewAppWithSkipUnchanged(skipUnchanged bool) *App {
+	envLoader := env.NewLoader()
+	configLoader := config.NewLoader()
+	clientFactory := ssh.NewClientFactory()
+	hashStorage := fs.NewFileHashStorage()
+	jobService := job.NewService(clientFactory, job.WithHashStorage(hashStorage), job.WithSkipUnchanged(skipUnchanged))
+
+	return &App{
+		envLoader:    envLoader,
+		configLoader: configLoader,
+		jobService:   jobService,
+	}
+}
+
 // NewAppWithDeps creates and returns a new App instance with custom dependencies
 func NewAppWithDeps(envLoader EnvLoader, configLoader ConfigLoader, jobService JobService) *App {
 	return &App{
@@ -61,9 +77,49 @@ func NewAppWithDeps(envLoader EnvLoader, configLoader ConfigLoader, jobService J
 	}
 }
 
-// Run executes the application with the provided parameters
+// Run executes the application with the provided parameters (standard behavior without step skipping)
 func Run(configPath, jobName string, envPaths []string, vaultPassword string) error {
-	return NewApp().Run(configPath, jobName, envPaths, vaultPassword)
+	app := NewApp()
+	return app.Run(configPath, jobName, envPaths, vaultPassword)
+}
+
+// RunWithSkipUnchanged executes the application with step skipping behavior
+func RunWithSkipUnchanged(configPath, jobName string, envPaths []string, vaultPassword string, skipUnchanged bool) error {
+	app := NewAppWithSkipUnchanged(skipUnchanged)
+	return app.Run(configPath, jobName, envPaths, vaultPassword)
+}
+
+// RunWithOptions executes the application with the provided parameters and all options
+func RunWithOptions(configPath, jobName string, envPaths []string, vaultPassword string, opts ...AppOption) error {
+	app := NewAppWithOptions(opts...)
+	return app.Run(configPath, jobName, envPaths, vaultPassword)
+}
+
+// AppOption is a function that modifies an App
+type AppOption func(*App)
+
+// WithSkipUnchanged returns an option that configures step skipping behavior
+func WithSkipUnchanged(skipUnchanged bool) AppOption {
+	return func(app *App) {
+		hashStorage := fs.NewFileHashStorage()
+		clientFactory := ssh.NewClientFactory()
+		app.jobService = job.NewService(clientFactory,
+			job.WithHashStorage(hashStorage),
+			job.WithSkipUnchanged(skipUnchanged))
+	}
+}
+
+// NewAppWithOptions creates a new App with the provided options
+func NewAppWithOptions(opts ...AppOption) *App {
+	app := NewApp()
+
+	// Apply all options
+	for _, opt := range opts {
+		opt(app)
+	}
+
+	// Return the configured app
+	return app
 }
 
 // Run executes the application with the provided configuration, job name,

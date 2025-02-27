@@ -10,6 +10,7 @@ type FileSystem interface {
 	Stat(name string) (os.FileInfo, error)
 	Open(name string) (io.ReadCloser, error)
 	ReadDir(name string) ([]os.DirEntry, error)
+	ReadFile(name string) ([]byte, error)
 	WriteFile(name string, data []byte, perm os.FileMode) error
 	MkdirAll(path string, perm os.FileMode) error
 	RemoveAll(path string) error
@@ -36,6 +37,11 @@ func (fs *DefaultFileSystem) Open(name string) (io.ReadCloser, error) {
 // ReadDir implements the FileSystem interface by reading directory entries using os.ReadDir
 func (fs *DefaultFileSystem) ReadDir(name string) ([]os.DirEntry, error) {
 	return os.ReadDir(name)
+}
+
+// ReadFile implements the FileSystem interface by reading a file using os.ReadFile
+func (fs *DefaultFileSystem) ReadFile(name string) ([]byte, error) {
+	return os.ReadFile(name)
 }
 
 // WriteFile implements the FileSystem interface by writing a file using os.WriteFile

@@ -183,6 +183,72 @@ func TestReadDir(t *testing.T) {
 	}
 }
 
+func TestReadFile(t *testing.T) {
+	tempDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	// Create a test file
+	testFilePath := filepath.Join(tempDir, "read-file-test.txt")
+	testContent := []byte("test file content for ReadFile")
+	err := os.WriteFile(testFilePath, testContent, 0644)
+	if err != nil {
+		t.Fatalf("Failed to create test file: %v", err)
+	}
+
+	fs := NewFileSystem()
+
+	// Test successful case
+	content, err := fs.ReadFile(testFilePath)
+	if err != nil {
+		t.Errorf("ReadFile() returned an error for existing file: %v", err)
+	}
+
+	if !bytes.Equal(content, testContent) {
+		t.Errorf("Expected content '%s', got '%s'", testContent, content)
+	}
+
+	// Test error case - non-existent file
+	_, err = fs.ReadFile(filepath.Join(tempDir, "non-existent.txt"))
+	if err == nil {
+		t.Errorf("ReadFile() did not return an error for non-existent file")
+	}
+
+	if !os.IsNotExist(err) {
+		t.Errorf("Expected 'file not found' error, got: %v", err)
+	}
+
+	// Test reading a directory
+	dirPath := filepath.Join(tempDir, "test-dir")
+	err = os.Mkdir(dirPath, 0755)
+	if err != nil {
+		t.Fatalf("Failed to create test directory: %v", err)
+	}
+
+	_, err = fs.ReadFile(dirPath)
+	if err == nil {
+		t.Errorf("ReadFile() did not return an error when reading a directory")
+	}
+
+	// Test reading a large file
+	largeFilePath := filepath.Join(tempDir, "large-file.bin")
+	largeContent := make([]byte, 1024*1024) // 1MB
+	for i := range largeContent {
+		largeContent[i] = byte(i % 256)
+	}
+	if err := os.WriteFile(largeFilePath, largeContent, 0644); err != nil {
+		t.Fatalf("Failed to create large test file: %v", err)
+	}
+
+	largeReadContent, err := fs.ReadFile(largeFilePath)
+	if err != nil {
+		t.Errorf("ReadFile() returned an error for large file: %v", err)
+	}
+
+	if !bytes.Equal(largeReadContent, largeContent) {
+		t.Errorf("Large file content does not match")
+	}
+}
+
 func TestWriteFile(t *testing.T) {
 	tempDir, cleanup := setupTestEnvironment(t)
 	defer cleanup()
@@ -374,6 +440,12 @@ func TestFileSystemIntegration(t *testing.T) {
 
 	if fileInfo.Size() != int64(len(content)) {
 		t.Errorf("Expected file size %d, got %d", len(content), fileInfo.Size())
+	}
+
+	// 3b. Read file using ReadFile
+	readContent, err := fs.ReadFile(filePath)
+	if err != nil || !bytes.Equal(readContent, content) {
+		t.Errorf("ReadFile did not return expected content: %v", err)
 	}
 
 	// 4. Read directory entries
