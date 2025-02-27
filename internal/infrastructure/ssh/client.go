@@ -68,9 +68,9 @@ func NewClientFactory() *ClientFactory {
 }
 
 // NewClientFactoryWithDeps creates a new SSH client factory with custom dependencies
-func NewClientFactoryWithDeps(fs fs.FileSystem, dialer SSHDialer, connector SFTPConnector) *ClientFactory {
+func NewClientFactoryWithDeps(f fs.FileSystem, dialer SSHDialer, connector SFTPConnector) *ClientFactory {
 	return &ClientFactory{
-		fileSystem:    fs,
+		fileSystem:    f,
 		sshDialer:     dialer,
 		sftpConnector: connector,
 	}

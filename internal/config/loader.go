@@ -38,9 +38,7 @@ func NewLoader() Loader {
 	loader := &DefaultLoader{
 		validator: validate,
 		loaders:   make(map[string]func(string) (*Config, error)),
-		cmdRunner: func(dir string, args ...string) ([]byte, error) {
-			return execCommand(dir, args...)
-		},
+		cmdRunner: execCommand,
 	}
 
 	// Register default loaders

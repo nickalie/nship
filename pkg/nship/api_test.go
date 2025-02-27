@@ -16,8 +16,8 @@ func TestNewBuilder(t *testing.T) {
 	}
 
 	// Check that the builder can create a config
-	config := builder.GetConfig()
-	if config == nil {
+	c := builder.GetConfig()
+	if c == nil {
 		t.Error("Builder returned nil config")
 	}
 }

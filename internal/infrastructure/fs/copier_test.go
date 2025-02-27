@@ -1,6 +1,7 @@
 package fs
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -245,7 +246,7 @@ func TestCopyFile(t *testing.T) {
 			fileCreated = true
 			return &MockWriteCloser{
 				WriteFunc: func(p []byte) (n int, err error) {
-					if string(p) == string(mockContent) {
+					if bytes.Equal(p, mockContent) {
 						fileWritten = true
 					}
 					return len(p), nil

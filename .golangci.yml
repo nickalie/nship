@@ -50,6 +50,9 @@ issues:
     - path: _test\.go
       linters:
         - gocyclo
+        - gocritic
+        - unused
+        - lll
   exclude-use-default: false
 
 run:

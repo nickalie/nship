@@ -4,3 +4,4 @@ deploy.yaml
 bin
 cmd/testdata
 coverage
+dist

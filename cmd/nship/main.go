@@ -29,6 +29,9 @@ func NewApplication() *Application {
 	}
 }
 
+// ParseFlags parses the command-line flags and updates the Application fields accordingly.
+// It sets the configuration file path, job name, environment file paths, vault password,
+// verbosity, and version flag based on the provided command-line arguments.
 func (app *Application) ParseFlags() {
 	flag.StringVar(&app.configPath, "config", app.configPath, "Path to configuration file")
 	flag.StringVar(&app.jobName, "job", app.jobName, "Name of specific job to run")

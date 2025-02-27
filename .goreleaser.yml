@@ -1,0 +1,116 @@
+# .goreleaser.yml
+# This is a sample configuration file for goreleaser
+# Visit https://goreleaser.com/customization/ for more info
+
+version: 2
+#signs:
+#  - artifacts: checksum
+
+project_name: nship
+
+before:
+  hooks:
+    # You may remove this if you don't use go modules.
+    - go mod tidy
+    # Uncomment if you use pre-commit hooks
+    # - pre-commit run --all-files
+
+builds:
+  - env:
+      - CGO_ENABLED=0
+    dir: cmd/nship
+    goos:
+      - linux
+      - windows
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    # Binary naming template. The default is {{.ProjectName}}_{{.Os}}_{{.Arch}}
+    binary: "{{.ProjectName}}"
+    # Include these additional build flags
+    flags:
+      - -trimpath
+    # Set custom ldflags - useful for embedding version info
+    ldflags:
+      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+
+archives:
+  - name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+      {{- if .Arm }}v{{ .Arm }}{{ end }}
+#    files:
+#      - README*
+#      - LICENSE*
+#      - CHANGELOG*
+#      - docs/*
+    format_overrides:
+      - goos: windows
+        formats: [ 'zip' ]
+
+checksum:
+  name_template: 'checksums.txt'
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+
+nfpms:
+  - id: nship
+    package_name: nship
+    file_name_template: "{{.ProjectName}}_{{.Tag}}_{{.Os}}_{{.Arch}}"
+    vendor: nickalie
+    homepage: https://nickalie.com
+    maintainer: nickalie <nick@nickalie.com>
+    description: bla bla
+    license: MIT
+    formats:
+      - deb
+      - rpm
+      - apk
+    bindir: /usr/bin
+    epoch: 1
+    release: 1
+
+# Publish section - uncomment and configure if using GitHub releases
+# release:
+#   github:
+#     owner: username
+#     name: repo-name
+#   prerelease: auto
+
+# Homebrew section - uncomment if you want to publish to Homebrew
+# brews:
+#   - tap:
+#       owner: username
+#       name: homebrew-tap
+#     folder: Formula
+#     homepage: https://github.com/username/repo-name
+#     description: Your project description
+#     license: MIT
+#     test: |
+#       system "#{bin}/program --version"
+
+# Docker section - uncomment if you want to build Docker images
+# dockers:
+#   - image_templates:
+#     - "your-registry/your-image:{{ .Version }}"
+#     - "your-registry/your-image:latest"
+#     dockerfile: Dockerfile
+#     build_flag_templates:
+#     - "--pull"
+#     - "--label=org.opencontainers.image.created={{.Date}}"
+#     - "--label=org.opencontainers.image.title={{.ProjectName}}"
+#     - "--label=org.opencontainers.image.revision={{.FullCommit}}"
+#     - "--label=org.opencontainers.image.version={{.Version}}"
