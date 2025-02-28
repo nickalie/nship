@@ -11,7 +11,7 @@ type Service struct {
 	clientFactory ClientFactory
 	hashStorage   HashStorage
 	fileSystem    FileSystemInterface
-	stepHasher    *StepHasher
+	stepHasher    StepHasherInterface
 	skipUnchanged bool
 }
 

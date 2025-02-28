@@ -1,6 +1,7 @@
 package job
 
 import (
+	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
@@ -29,9 +30,7 @@ func TestGetShell(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.step.GetShell(); got != tt.expectedShell {
-				t.Errorf("Step.GetShell() = %v, want %v", got, tt.expectedShell)
-			}
+			assert.Equal(t, tt.expectedShell, tt.step.GetShell(), "Shell should match expected value")
 		})
 	}
 }
@@ -73,20 +72,15 @@ func TestGetType(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.step.GetType(); got != tt.expectedType {
-				t.Errorf("Step.GetType() = %v, want %v", got, tt.expectedType)
-			}
+			assert.Equal(t, tt.expectedType, tt.step.GetType(), "Step type should match expected type")
 		})
 	}
 }
 
 func TestPanicOnInvalidStepType(t *testing.T) {
-	defer func() {
-		if r := recover(); r == nil {
-			t.Errorf("GetType() should panic on invalid step type")
-		}
-	}()
-
 	step := Step{}
-	step.GetType()
+
+	assert.Panics(t, func() {
+		step.GetType()
+	}, "GetType() should panic on invalid step type")
 }

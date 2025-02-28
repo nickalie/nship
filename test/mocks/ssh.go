@@ -138,6 +138,15 @@ func (m *MockFileSystem) ReadDir(name string) ([]os.DirEntry, error) {
 	return m.entries, nil
 }
 
+// ReadFile implements FileSystem.ReadFile for testing
+func (m *MockFileSystem) ReadFile(name string) ([]byte, error) {
+	args := m.Called(name)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]byte), args.Error(1)
+}
+
 // WriteFile implements FileSystem.WriteFile for testing
 func (m *MockFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
 	args := m.Called(name, data, perm)

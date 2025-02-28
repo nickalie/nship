@@ -82,12 +82,12 @@ func TestJobService_ExecuteJobs(t *testing.T) {
 			err := service.ExecuteJobs(tt.targets, tt.jobs)
 
 			if tt.expectedErr {
-				assert.Error(t, err)
+				assert.Error(t, err, "Expected error")
 				if tt.errContains != "" {
-					assert.Contains(t, err.Error(), tt.errContains)
+					assert.Contains(t, err.Error(), tt.errContains, "Error message should contain expected text")
 				}
 			} else {
-				assert.NoError(t, err)
+				assert.NoError(t, err, "Expected no error")
 			}
 
 			mockFactory.AssertExpectations(t)
@@ -163,12 +163,12 @@ func TestJobService_ExecuteJob(t *testing.T) {
 			err := service.ExecuteJob(tt.target, tt.job)
 
 			if tt.expectedErr {
-				assert.Error(t, err)
+				assert.Error(t, err, "Expected error")
 				if tt.errContains != "" {
-					assert.Contains(t, err.Error(), tt.errContains)
+					assert.Contains(t, err.Error(), tt.errContains, "Error message should contain expected text")
 				}
 			} else {
-				assert.NoError(t, err)
+				assert.NoError(t, err, "Expected no error")
 			}
 
 			mockFactory.AssertExpectations(t)

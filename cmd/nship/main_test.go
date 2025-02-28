@@ -3,9 +3,10 @@ package main
 import (
 	"flag"
 	"os"
-	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestParseFlags(t *testing.T) {
@@ -83,30 +84,13 @@ func TestParseFlags(t *testing.T) {
 			app := NewApplication()
 			app.ParseFlags()
 
-			// Check values
-			if app.configPath != tt.wantConfig {
-				t.Errorf("configPath = %v, want %v", app.configPath, tt.wantConfig)
-			}
-
-			if app.jobName != tt.wantJob {
-				t.Errorf("jobName = %v, want %v", app.jobName, tt.wantJob)
-			}
-
-			if !reflect.DeepEqual(app.envPaths, tt.wantEnv) {
-				t.Errorf("envPaths = %v, want %v", app.envPaths, tt.wantEnv)
-			}
-
-			if app.vaultPassword != tt.wantPassword {
-				t.Errorf("vaultPassword = %v, want %v", app.vaultPassword, tt.wantPassword)
-			}
-
-			if app.verbose != tt.wantVerbose {
-				t.Errorf("verbose = %v, want %v", app.verbose, tt.wantVerbose)
-			}
-
-			if app.version != tt.wantVersion {
-				t.Errorf("version = %v, want %v", app.version, tt.wantVersion)
-			}
+			// Check values using testify/assert
+			assert.Equal(t, tt.wantConfig, app.configPath, "configPath mismatch")
+			assert.Equal(t, tt.wantJob, app.jobName, "jobName mismatch")
+			assert.Equal(t, tt.wantEnv, app.envPaths, "envPaths mismatch")
+			assert.Equal(t, tt.wantPassword, app.vaultPassword, "vaultPassword mismatch")
+			assert.Equal(t, tt.wantVerbose, app.verbose, "verbose flag mismatch")
+			assert.Equal(t, tt.wantVersion, app.version, "version flag mismatch")
 		})
 	}
 }
@@ -149,9 +133,7 @@ func TestEnvPathsParsing(t *testing.T) {
 				app.envPaths = strings.Split(tt.envPaths, ",")
 			}
 
-			if !reflect.DeepEqual(app.envPaths, tt.wantPaths) {
-				t.Errorf("envPathsList = %v, want %v", app.envPaths, tt.wantPaths)
-			}
+			assert.Equal(t, tt.wantPaths, app.envPaths, "envPathsList mismatch")
 		})
 	}
 }
@@ -179,8 +161,10 @@ func TestApplicationRun(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.app.Run()
 
-			if (err != nil) != tt.expectError {
-				t.Errorf("app.Run() error = %v, expectError %v", err, tt.expectError)
+			if tt.expectError {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
@@ -197,9 +181,7 @@ func TestMainComponents(t *testing.T) {
 
 	// This should just print the version and return
 	err := app.Run()
-	if err != nil {
-		t.Errorf("Expected no error for version flag, got: %v", err)
-	}
+	assert.NoError(t, err, "Expected no error for version flag")
 
 	// Testing error cases would require mocking the cli.App dependency
 }

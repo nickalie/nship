@@ -3,11 +3,12 @@ package job
 import (
 	"errors"
 	"fmt"
-	"github.com/stretchr/testify/mock"
 	"os"
 	"testing"
 
 	"github.com/nickalie/nship/internal/core/target"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 )
 
 func TestNewServiceWithOptions(t *testing.T) {
@@ -20,19 +21,34 @@ func TestNewServiceWithOptions(t *testing.T) {
 		WithSkipUnchanged(false))
 
 	// Verify options were applied
-	if service.hashStorage != mockHashStorage {
-		t.Error("HashStorage option was not applied")
-	}
+	assert.Equal(t, mockHashStorage, service.hashStorage, "HashStorage option was not applied")
+	assert.Equal(t, false, service.skipUnchanged, "SkipUnchanged option was not applied")
+}
 
-	if service.skipUnchanged != false {
-		t.Error("SkipUnchanged option was not applied")
+// MockStepHasher implements StepHasherInterface for testing
+type MockStepHasher struct {
+	ComputeHashFunc func(step *Step, fs FileSystemInterface) (string, error)
+}
+
+// ComputeHash implements the hashing functionality
+func (m *MockStepHasher) ComputeHash(step *Step, fs FileSystemInterface) (string, error) {
+	if m.ComputeHashFunc != nil {
+		return m.ComputeHashFunc(step, fs)
 	}
+	return "", errors.New("ComputeHash not implemented")
 }
 
 func TestShouldExecuteStep(t *testing.T) {
 	// Create step for testing
 	step := &Step{Run: "echo test"}
 	defaultHash := "hashed_step_value"
+
+	// Create a mock StepHasher that always returns defaultHash
+	mockStepHasher := &MockStepHasher{
+		ComputeHashFunc: func(step *Step, fs FileSystemInterface) (string, error) {
+			return defaultHash, nil
+		},
+	}
 
 	// Create mock filesystem
 	mockFS := &MockFileSystemForHashing{
@@ -47,6 +63,7 @@ func TestShouldExecuteStep(t *testing.T) {
 		skipUnchanged  bool
 		hashStorage    HashStorage
 		expectedResult bool
+		expectErr      bool
 	}{
 		{
 			name:           "force execute",
@@ -54,6 +71,7 @@ func TestShouldExecuteStep(t *testing.T) {
 			skipUnchanged:  true,
 			hashStorage:    nil,
 			expectedResult: true,
+			expectErr:      false,
 		},
 		{
 			name:           "skip unchanged disabled",
@@ -61,6 +79,7 @@ func TestShouldExecuteStep(t *testing.T) {
 			skipUnchanged:  false,
 			hashStorage:    nil,
 			expectedResult: true,
+			expectErr:      false,
 		},
 		{
 			name:           "no hash storage",
@@ -68,6 +87,7 @@ func TestShouldExecuteStep(t *testing.T) {
 			skipUnchanged:  true,
 			hashStorage:    nil,
 			expectedResult: true,
+			expectErr:      false,
 		},
 		{
 			name:          "stored hash matches",
@@ -79,6 +99,7 @@ func TestShouldExecuteStep(t *testing.T) {
 				},
 			},
 			expectedResult: false, // Should skip due to matching hash
+			expectErr:      false,
 		},
 		{
 			name:          "stored hash differs",
@@ -90,6 +111,7 @@ func TestShouldExecuteStep(t *testing.T) {
 				},
 			},
 			expectedResult: true, // Should execute due to different hash
+			expectErr:      false,
 		},
 		{
 			name:          "no stored hash",
@@ -101,6 +123,7 @@ func TestShouldExecuteStep(t *testing.T) {
 				},
 			},
 			expectedResult: true, // Should execute when no hash is stored
+			expectErr:      false,
 		},
 		{
 			name:          "hash storage error",
@@ -112,14 +135,16 @@ func TestShouldExecuteStep(t *testing.T) {
 				},
 			},
 			expectedResult: true, // Should execute on error
+			expectErr:      true,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create service with test configuration
+			// Create service with test configuration
 			service := &Service{
-				stepHasher:    NewStepHasher(),
+				stepHasher:    mockStepHasher, // Use our mock hasher
 				skipUnchanged: tt.skipUnchanged,
 				hashStorage:   tt.hashStorage,
 				fileSystem:    mockFS,
@@ -133,13 +158,14 @@ func TestShouldExecuteStep(t *testing.T) {
 			result, err := service.shouldExecuteStep(tgt, job, 0, step, tt.forceExecute)
 
 			// Check result
-			if result != tt.expectedResult {
-				t.Errorf("Expected shouldExecuteStep to return %v, got %v", tt.expectedResult, result)
-			}
+			assert.Equal(t, tt.expectedResult, result,
+				"shouldExecuteStep returned unexpected result")
 
-			// If an error is expected, verify it was returned
-			if tt.hashStorage != nil && tt.name == "hash storage error" && err == nil {
-				t.Error("Expected error but got nil")
+			// Check error status
+			if tt.expectErr {
+				assert.Error(t, err, "Expected error but got nil")
+			} else {
+				assert.NoError(t, err, "Unexpected error")
 			}
 		})
 	}
@@ -178,6 +204,7 @@ func TestStepSkipping(t *testing.T) {
 			executedSteps[stepNum-1] = true
 		}).
 		Return(nil)
+	mockClient.On("Close").Return()
 
 	// Create a client factory that returns our mock client
 	mockClientFactory := &MockClientFactory{}
@@ -280,11 +307,7 @@ func TestStepSkipping(t *testing.T) {
 
 			// Execute the job
 			err := service.ExecuteJob(tgt, job)
-
-			// Check for errors
-			if err != nil {
-				t.Fatalf("ExecuteJob returned error: %v", err)
-			}
+			assert.NoError(t, err, "ExecuteJob returned error")
 
 			// Check which steps were executed
 			for i := 0; i < len(job.Steps); i++ {
@@ -296,10 +319,8 @@ func TestStepSkipping(t *testing.T) {
 					}
 				}
 
-				if executedSteps[i] != expectedExecution {
-					t.Errorf("Step %d execution: got %v, expected %v",
-						i, executedSteps[i], expectedExecution)
-				}
+				assert.Equal(t, expectedExecution, executedSteps[i],
+					"Step %d execution unexpected", i)
 			}
 		})
 	}
@@ -320,22 +341,15 @@ func TestClearHashes(t *testing.T) {
 		service := NewService(mockClientFactory, WithHashStorage(mockHashStorage))
 
 		err := service.ClearHashes()
-		if err != nil {
-			t.Errorf("ClearHashes returned error: %v", err)
-		}
-
-		if !cleared {
-			t.Error("Hash storage Clear() was not called")
-		}
+		assert.NoError(t, err, "ClearHashes should not return an error")
+		assert.True(t, cleared, "Hash storage Clear() was not called")
 	})
 
 	t.Run("without hash storage", func(t *testing.T) {
 		service := NewService(mockClientFactory)
 
 		err := service.ClearHashes()
-		if err != nil {
-			t.Errorf("ClearHashes returned error: %v", err)
-		}
+		assert.NoError(t, err, "ClearHashes should not return an error")
 	})
 
 	t.Run("with error", func(t *testing.T) {
@@ -348,8 +362,6 @@ func TestClearHashes(t *testing.T) {
 		service := NewService(mockClientFactory, WithHashStorage(mockHashStorage))
 
 		err := service.ClearHashes()
-		if err == nil {
-			t.Error("Expected error but got nil")
-		}
+		assert.Error(t, err, "Expected error but got nil")
 	})
 }

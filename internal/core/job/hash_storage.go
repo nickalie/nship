@@ -24,11 +24,16 @@ type HashStorage interface {
 	Clear() error
 }
 
+// StepHasherInterface defines the interface for hash computation
+type StepHasherInterface interface {
+	ComputeHash(step *Step, fs FileSystemInterface) (string, error)
+}
+
 // StepHasher handles computing hashes for steps
 type StepHasher struct{}
 
 // NewStepHasher creates a new StepHasher
-func NewStepHasher() *StepHasher {
+func NewStepHasher() StepHasherInterface {
 	return &StepHasher{}
 }
 

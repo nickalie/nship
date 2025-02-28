@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // MockVaultDecrypter implements the VaultDecrypter interface for testing
@@ -20,9 +23,7 @@ func (m *MockVaultDecrypter) Decrypt(content, password string) (string, error) {
 // setupTest creates a temporary directory and returns its path along with a cleanup function
 func setupTest(t *testing.T) (string, func()) {
 	tempDir, err := os.MkdirTemp("", "env-loader-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp directory: %v", err)
-	}
+	require.NoError(t, err, "Failed to create temp directory")
 
 	return tempDir, func() {
 		os.RemoveAll(tempDir)
@@ -34,16 +35,13 @@ func setupTest(t *testing.T) (string, func()) {
 func captureStdin(t *testing.T) (func(input string), func()) {
 	origStdin := os.Stdin
 	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatalf("Failed to create pipe: %v", err)
-	}
+	require.NoError(t, err, "Failed to create pipe")
+
 	os.Stdin = r
 
 	return func(input string) {
 			_, err := w.Write([]byte(input + "\n"))
-			if err != nil {
-				t.Fatalf("Failed to write to mock stdin: %v", err)
-			}
+			require.NoError(t, err, "Failed to write to mock stdin")
 		}, func() {
 			w.Close()
 			r.Close()
@@ -56,9 +54,7 @@ func TestNewLoader(t *testing.T) {
 
 	// Verify the loader is of the correct type
 	_, ok := loader.(*DefaultLoader)
-	if !ok {
-		t.Errorf("NewLoader() did not return a *DefaultLoader, got %T", loader)
-	}
+	assert.True(t, ok, "NewLoader() did not return a *DefaultLoader")
 }
 
 func TestLoadEmptyPath(t *testing.T) {
@@ -66,9 +62,7 @@ func TestLoadEmptyPath(t *testing.T) {
 
 	// Empty path should not return an error
 	err := loader.Load("", "")
-	if err != nil {
-		t.Errorf("Load with empty path should not error, got: %v", err)
-	}
+	assert.NoError(t, err, "Load with empty path should not error")
 }
 
 func TestLoadRegularFile(t *testing.T) {
@@ -78,9 +72,7 @@ func TestLoadRegularFile(t *testing.T) {
 	// Create a simple .env file
 	envFilePath := filepath.Join(tempDir, ".env")
 	err := os.WriteFile(envFilePath, []byte("TEST_KEY=test_value"), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write test .env file: %v", err)
-	}
+	require.NoError(t, err, "Failed to write test .env file")
 
 	// Clear any pre-existing value
 	os.Unsetenv("TEST_KEY")
@@ -90,14 +82,8 @@ func TestLoadRegularFile(t *testing.T) {
 	err = loader.Load(envFilePath, "")
 
 	// Check that no error occurred and the variable was set
-	if err != nil {
-		t.Errorf("Expected no error loading .env file, got: %v", err)
-	}
-
-	value := os.Getenv("TEST_KEY")
-	if value != "test_value" {
-		t.Errorf("Expected TEST_KEY to be 'test_value', got '%s'", value)
-	}
+	assert.NoError(t, err, "Expected no error loading .env file")
+	assert.Equal(t, "test_value", os.Getenv("TEST_KEY"), "Environment variable was not set correctly")
 }
 
 func TestLoadNonExistentFile(t *testing.T) {
@@ -109,9 +95,7 @@ func TestLoadNonExistentFile(t *testing.T) {
 	loader := NewLoader()
 	err := loader.Load(nonExistentPath, "")
 
-	if err == nil {
-		t.Errorf("Expected error when loading non-existent file, got nil")
-	}
+	assert.Error(t, err, "Expected error when loading non-existent file")
 }
 
 func TestLoadVaultFileWithPassword(t *testing.T) {
@@ -121,9 +105,7 @@ func TestLoadVaultFileWithPassword(t *testing.T) {
 	// Create a mock vault file
 	vaultFilePath := filepath.Join(tempDir, "test.vault")
 	err := os.WriteFile(vaultFilePath, []byte("encrypted content"), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write test vault file: %v", err)
-	}
+	require.NoError(t, err, "Failed to write test vault file")
 
 	// Create mock decrypter that returns valid env content
 	mockDecrypter := &MockVaultDecrypter{
@@ -147,14 +129,8 @@ func TestLoadVaultFileWithPassword(t *testing.T) {
 	err = loader.Load(vaultFilePath, "test-password")
 
 	// Check that no error occurred and the variable was set
-	if err != nil {
-		t.Errorf("Expected no error loading vault file, got: %v", err)
-	}
-
-	value := os.Getenv("TEST_VAULT_KEY")
-	if value != "vault_value" {
-		t.Errorf("Expected TEST_VAULT_KEY to be 'vault_value', got '%s'", value)
-	}
+	assert.NoError(t, err, "Expected no error loading vault file")
+	assert.Equal(t, "vault_value", os.Getenv("TEST_VAULT_KEY"), "Vault environment variable was not set correctly")
 }
 
 func TestLoadVaultFileWithEnvironmentPassword(t *testing.T) {
@@ -164,9 +140,7 @@ func TestLoadVaultFileWithEnvironmentPassword(t *testing.T) {
 	// Create a mock vault file
 	vaultFilePath := filepath.Join(tempDir, "env-password.vault")
 	err := os.WriteFile(vaultFilePath, []byte("encrypted content"), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write test vault file: %v", err)
-	}
+	require.NoError(t, err, "Failed to write test vault file")
 
 	// Set environment password
 	os.Setenv("VAULT_PASSWORD", "env-password")
@@ -194,14 +168,8 @@ func TestLoadVaultFileWithEnvironmentPassword(t *testing.T) {
 	err = loader.Load(vaultFilePath, "")
 
 	// Check that no error occurred and the variable was set
-	if err != nil {
-		t.Errorf("Expected no error loading vault file with env password, got: %v", err)
-	}
-
-	value := os.Getenv("ENV_PASSWORD_KEY")
-	if value != "env_password_value" {
-		t.Errorf("Expected ENV_PASSWORD_KEY to be 'env_password_value', got '%s'", value)
-	}
+	assert.NoError(t, err, "Expected no error loading vault file with env password")
+	assert.Equal(t, "env_password_value", os.Getenv("ENV_PASSWORD_KEY"), "Environment variable from vault with env password was not set correctly")
 }
 
 func TestLoadVaultFileWithPromptedPassword(t *testing.T) {
@@ -216,9 +184,7 @@ func TestLoadVaultFileWithPromptedPassword(t *testing.T) {
 	// Create a mock vault file
 	vaultFilePath := filepath.Join(tempDir, "prompted-password.vault")
 	err := os.WriteFile(vaultFilePath, []byte("encrypted content"), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write test vault file: %v", err)
-	}
+	require.NoError(t, err, "Failed to write test vault file")
 
 	// Clear environment password
 	os.Unsetenv("VAULT_PASSWORD")
@@ -254,14 +220,8 @@ func TestLoadVaultFileWithPromptedPassword(t *testing.T) {
 	err = loader.Load(vaultFilePath, "")
 
 	// Check that no error occurred and the variable was set
-	if err != nil {
-		t.Errorf("Expected no error loading vault file with prompted password, got: %v", err)
-	}
-
-	value := os.Getenv("PROMPTED_KEY")
-	if value != "prompted_value" {
-		t.Errorf("Expected PROMPTED_KEY to be 'prompted_value', got '%s'", value)
-	}
+	assert.NoError(t, err, "Expected no error loading vault file with prompted password")
+	assert.Equal(t, "prompted_value", os.Getenv("PROMPTED_KEY"), "Environment variable from vault with prompted password was not set correctly")
 }
 
 func TestLoadVaultFileDecryptionError(t *testing.T) {
@@ -271,9 +231,7 @@ func TestLoadVaultFileDecryptionError(t *testing.T) {
 	// Create a mock vault file
 	vaultFilePath := filepath.Join(tempDir, "error.vault")
 	err := os.WriteFile(vaultFilePath, []byte("invalid content"), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write test vault file: %v", err)
-	}
+	require.NoError(t, err, "Failed to write test vault file")
 
 	// Create mock decrypter that always returns an error
 	decryptErr := errors.New("decryption failed")
@@ -292,9 +250,7 @@ func TestLoadVaultFileDecryptionError(t *testing.T) {
 	err = loader.Load(vaultFilePath, "any-password")
 
 	// Check that an error occurred
-	if err == nil {
-		t.Errorf("Expected error when decryption fails, got nil")
-	}
+	assert.Error(t, err, "Expected error when decryption fails")
 }
 
 func TestSetEnvironmentVariablesInvalidContent(t *testing.T) {
@@ -303,9 +259,7 @@ func TestSetEnvironmentVariablesInvalidContent(t *testing.T) {
 	// The godotenv library requires a specific format and will fail on certain invalid inputs
 	err := setEnvironmentVariables("===INVALID===CONTENT===")
 
-	if err == nil {
-		t.Errorf("Expected error when setting environment variables from invalid content, got nil")
-	}
+	assert.Error(t, err, "Expected error when setting environment variables from invalid content")
 }
 
 func TestSetEnvironmentVariablesMultipleVars(t *testing.T) {
@@ -316,23 +270,12 @@ func TestSetEnvironmentVariablesMultipleVars(t *testing.T) {
 
 	// Set multiple environment variables
 	err := setEnvironmentVariables("VAR1=value1\nVAR2=value2\nVAR3=value3")
-
-	if err != nil {
-		t.Errorf("Expected no error setting multiple environment variables, got: %v", err)
-	}
+	assert.NoError(t, err, "Expected no error setting multiple environment variables")
 
 	// Check that all variables were set
-	if os.Getenv("VAR1") != "value1" {
-		t.Errorf("Expected VAR1 to be 'value1', got '%s'", os.Getenv("VAR1"))
-	}
-
-	if os.Getenv("VAR2") != "value2" {
-		t.Errorf("Expected VAR2 to be 'value2', got '%s'", os.Getenv("VAR2"))
-	}
-
-	if os.Getenv("VAR3") != "value3" {
-		t.Errorf("Expected VAR3 to be 'value3', got '%s'", os.Getenv("VAR3"))
-	}
+	assert.Equal(t, "value1", os.Getenv("VAR1"), "VAR1 was not set correctly")
+	assert.Equal(t, "value2", os.Getenv("VAR2"), "VAR2 was not set correctly")
+	assert.Equal(t, "value3", os.Getenv("VAR3"), "VAR3 was not set correctly")
 }
 
 func TestResolveVaultPasswordPrecedence(t *testing.T) {
@@ -344,21 +287,13 @@ func TestResolveVaultPasswordPrecedence(t *testing.T) {
 
 	// Direct password should take precedence
 	password, err := resolveVaultPassword("direct-password")
-	if err != nil {
-		t.Errorf("Unexpected error resolving password: %v", err)
-	}
-	if password != "direct-password" {
-		t.Errorf("Expected 'direct-password', got '%s'", password)
-	}
+	assert.NoError(t, err, "Unexpected error resolving password")
+	assert.Equal(t, "direct-password", password, "Direct password should be used")
 
 	// Environment variable should be used if no direct password
 	password, err = resolveVaultPassword("")
-	if err != nil {
-		t.Errorf("Unexpected error resolving password: %v", err)
-	}
-	if password != "env-password" {
-		t.Errorf("Expected 'env-password', got '%s'", password)
-	}
+	assert.NoError(t, err, "Unexpected error resolving password")
+	assert.Equal(t, "env-password", password, "Environment variable password should be used")
 
 	// Skip testing prompt since it requires stdin interaction
 }
@@ -376,21 +311,15 @@ func TestMockVaultDecrypter(t *testing.T) {
 
 	// Test successful case
 	decrypted, err := mockDecrypter.Decrypt("valid", "correct")
-	if err != nil {
-		t.Errorf("Expected no error from mock decrypter, got: %v", err)
-	}
-	if decrypted != "decrypted" {
-		t.Errorf("Expected 'decrypted', got '%s'", decrypted)
-	}
+	assert.NoError(t, err, "Expected no error from mock decrypter in successful case")
+	assert.Equal(t, "decrypted", decrypted, "Unexpected decrypted output")
 
 	// Test error case
 	_, err = mockDecrypter.Decrypt("invalid", "wrong")
-	if err == nil {
-		t.Errorf("Expected error from mock decrypter, got nil")
-	}
+	assert.Error(t, err, "Expected error from mock decrypter in error case")
 }
 
-// TestSetEnvironmentVariablesError tests error handling in setEnvironmentVariables
+// TestSetEnvironmentVariablesCustomError tests error handling in setEnvironmentVariables
 func TestSetEnvironmentVariablesCustomError(t *testing.T) {
 	// This is a limited test since it's difficult to force os.Setenv to fail
 	// in a controlled way. In a real environment, this might happen with
@@ -398,9 +327,7 @@ func TestSetEnvironmentVariablesCustomError(t *testing.T) {
 
 	// Try with empty content - should not error
 	err := setEnvironmentVariables("")
-	if err != nil {
-		t.Errorf("Expected no error for empty content, got: %v", err)
-	}
+	assert.NoError(t, err, "Expected no error for empty content")
 }
 
 // Integration-like test that uses a custom config.VaultDecrypter
@@ -412,19 +339,13 @@ func TestLoadWithCustomDecrypter(t *testing.T) {
 	vaultFilePath := filepath.Join(tempDir, "custom.vault")
 	content := "custom encrypted content"
 	err := os.WriteFile(vaultFilePath, []byte(content), 0644)
-	if err != nil {
-		t.Fatalf("Failed to write test vault file: %v", err)
-	}
+	require.NoError(t, err, "Failed to write test vault file")
 
 	// Create a custom decrypter
 	customDecrypter := &MockVaultDecrypter{
 		decryptFunc: func(receivedContent, receivedPassword string) (string, error) {
-			if receivedContent != content {
-				return "", errors.New("content mismatch")
-			}
-			if receivedPassword != "custom-password" {
-				return "", errors.New("password mismatch")
-			}
+			assert.Equal(t, content, receivedContent, "Content mismatch")
+			assert.Equal(t, "custom-password", receivedPassword, "Password mismatch")
 			return "CUSTOM_KEY=custom_value", nil
 		},
 	}
@@ -441,12 +362,6 @@ func TestLoadWithCustomDecrypter(t *testing.T) {
 	err = loader.Load(vaultFilePath, "custom-password")
 
 	// Check that no error occurred and the variable was set
-	if err != nil {
-		t.Errorf("Expected no error loading vault file with custom decrypter, got: %v", err)
-	}
-
-	value := os.Getenv("CUSTOM_KEY")
-	if value != "custom_value" {
-		t.Errorf("Expected CUSTOM_KEY to be 'custom_value', got '%s'", value)
-	}
+	assert.NoError(t, err, "Expected no error loading vault file with custom decrypter")
+	assert.Equal(t, "custom_value", os.Getenv("CUSTOM_KEY"), "Environment variable from vault with custom decrypter was not set correctly")
 }

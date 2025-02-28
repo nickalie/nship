@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // MockFileSystem for testing
@@ -82,49 +84,31 @@ func TestFileHashStorage_SaveAndGetHash(t *testing.T) {
 
 	// Save a hash
 	err := storage.SaveHash("target1", "job1", 0, "hash1")
-	if err != nil {
-		t.Fatalf("Failed to save hash: %v", err)
-	}
+	assert.NoError(t, err, "Failed to save hash")
 
 	// Get the hash
 	hash, err := storage.GetHash("target1", "job1", 0)
-	if err != nil {
-		t.Fatalf("Failed to get hash: %v", err)
-	}
-
-	if hash != "hash1" {
-		t.Errorf("Expected hash to be 'hash1', got '%s'", hash)
-	}
+	assert.NoError(t, err, "Failed to get hash")
+	assert.Equal(t, "hash1", hash, "Retrieved hash doesn't match expected value")
 
 	// Try to get a non-existent hash
 	hash, err = storage.GetHash("target1", "job1", 1)
-	if err != nil {
-		t.Fatalf("Getting non-existent hash should not error: %v", err)
-	}
-
-	if hash != "" {
-		t.Errorf("Expected empty hash for non-existent entry, got '%s'", hash)
-	}
+	assert.NoError(t, err, "Getting non-existent hash should not error")
+	assert.Empty(t, hash, "Expected empty hash for non-existent entry")
 
 	// Verify the data was written to file
 	expectedPath := filepath.Join(".test/hashes", "step_hashes.json")
-	if _, ok := mockHashData[expectedPath]; !ok {
-		t.Error("Hash file was not written")
-	}
+	assert.Contains(t, mockHashData, expectedPath, "Hash file was not written")
 
 	// Verify the file content
 	jsonData := mockHashData[expectedPath]
 	var hashList []StepHash
-	if err := json.Unmarshal(jsonData, &hashList); err != nil {
-		t.Fatalf("Failed to parse hash file JSON: %v", err)
-	}
+	err = json.Unmarshal(jsonData, &hashList)
+	assert.NoError(t, err, "Failed to parse hash file JSON")
 
-	if len(hashList) != 1 {
-		t.Errorf("Expected 1 hash in file, got %d", len(hashList))
-	}
-
-	if len(hashList) > 0 && hashList[0].Hash != "hash1" {
-		t.Errorf("Expected stored hash to be 'hash1', got '%s'", hashList[0].Hash)
+	assert.Len(t, hashList, 1, "Expected 1 hash in file")
+	if len(hashList) > 0 {
+		assert.Equal(t, "hash1", hashList[0].Hash, "Stored hash doesn't match expected value")
 	}
 }
 
@@ -145,13 +129,8 @@ func TestFileHashStorage_Clear(t *testing.T) {
 	// Since we can't easily check in-memory state, we'll just verify that
 	// RemoveAll was called
 	err := storage.Clear()
-	if err != nil {
-		t.Fatalf("Failed to clear hashes: %v", err)
-	}
-
-	if !removed {
-		t.Error("RemoveAll was not called during Clear()")
-	}
+	assert.NoError(t, err, "Failed to clear hashes")
+	assert.True(t, removed, "RemoveAll was not called during Clear()")
 }
 
 func TestFileHashStorage_LoadFromFile(t *testing.T) {
@@ -176,23 +155,13 @@ func TestFileHashStorage_LoadFromFile(t *testing.T) {
 
 	// Get a hash to trigger loading from file
 	hash, err := storage.GetHash("target1", "job1", 0)
-	if err != nil {
-		t.Fatalf("Failed to get hash: %v", err)
-	}
-
-	if hash != "hash1" {
-		t.Errorf("Expected hash to be 'hash1', got '%s'", hash)
-	}
+	assert.NoError(t, err, "Failed to get hash")
+	assert.Equal(t, "hash1", hash, "Retrieved hash doesn't match expected value")
 
 	// Get another hash to ensure all were loaded
 	hash, err = storage.GetHash("target2", "job2", 1)
-	if err != nil {
-		t.Fatalf("Failed to get hash: %v", err)
-	}
-
-	if hash != "hash2" {
-		t.Errorf("Expected hash to be 'hash2', got '%s'", hash)
-	}
+	assert.NoError(t, err, "Failed to get hash")
+	assert.Equal(t, "hash2", hash, "Retrieved hash doesn't match expected value")
 }
 
 func TestFileHashStorage_FileErrors(t *testing.T) {
@@ -220,9 +189,7 @@ func TestFileHashStorage_FileErrors(t *testing.T) {
 
 	// Test error handling for Read
 	_, err := storage.GetHash("target1", "job1", 0)
-	if err == nil {
-		t.Error("Expected error when reading hash file fails, got nil")
-	}
+	assert.Error(t, err, "Expected error when reading hash file fails")
 
 	// Reset loaded flag
 	storage.loaded = false
@@ -242,9 +209,7 @@ func TestFileHashStorage_FileErrors(t *testing.T) {
 	}
 
 	err = storage.SaveHash("target1", "job1", 0, "hash1")
-	if err == nil {
-		t.Error("Expected error when writing hash file fails, got nil")
-	}
+	assert.Error(t, err, "Expected error when writing hash file fails")
 
 	// Test error handling for MkdirAll
 	storage.fileSystem = &MockHashFileSystem{
@@ -257,9 +222,7 @@ func TestFileHashStorage_FileErrors(t *testing.T) {
 	}
 
 	err = storage.SaveHash("target1", "job1", 0, "hash1")
-	if err == nil {
-		t.Error("Expected error when creating directory fails, got nil")
-	}
+	assert.Error(t, err, "Expected error when creating directory fails")
 }
 
 func TestMakeHashKey(t *testing.T) {
@@ -276,9 +239,8 @@ func TestMakeHashKey(t *testing.T) {
 
 	for _, tt := range tests {
 		key := makeHashKey(tt.targetName, tt.jobName, tt.stepIndex)
-		if key != tt.expected {
-			t.Errorf("makeHashKey(%s, %s, %d) = %s, want %s",
-				tt.targetName, tt.jobName, tt.stepIndex, key, tt.expected)
-		}
+		assert.Equal(t, tt.expected, key,
+			"makeHashKey(%s, %s, %d) returned unexpected result",
+			tt.targetName, tt.jobName, tt.stepIndex)
 	}
 }

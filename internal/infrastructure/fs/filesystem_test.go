@@ -6,6 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Fix for line 467 that has "no new variables on left side of :=" error
@@ -18,70 +21,48 @@ func TestFileSystemIntegration(t *testing.T) {
 	// 1. Create a directory
 	dirPath := filepath.Join(tempDir, "integration-test")
 	err := fs.MkdirAll(dirPath, 0755)
-	if err != nil {
-		t.Fatalf("MkdirAll failed: %v", err)
-	}
+	require.NoError(t, err, "MkdirAll failed")
 
 	// 2. Write a file
 	filePath := filepath.Join(dirPath, "test-file.txt")
 	content := []byte("integration test content")
 	err = fs.WriteFile(filePath, content, 0644)
-	if err != nil {
-		t.Fatalf("WriteFile failed: %v", err)
-	}
+	require.NoError(t, err, "WriteFile failed")
 
 	// 3. Get file stats
 	fileInfo, err := fs.Stat(filePath)
-	if err != nil {
-		t.Fatalf("Stat failed: %v", err)
-	}
+	require.NoError(t, err, "Stat failed")
 
-	if fileInfo.Size() != int64(len(content)) {
-		t.Errorf("Expected file size %d, got %d", len(content), fileInfo.Size())
-	}
+	assert.Equal(t, int64(len(content)), fileInfo.Size(), "File size doesn't match expected value")
 
 	// 3b. Read file using ReadFile
 	readContent, err := fs.ReadFile(filePath)
-	if err != nil || !bytes.Equal(readContent, content) {
-		t.Errorf("ReadFile did not return expected content: %v", err)
-	}
+	require.NoError(t, err, "ReadFile failed")
+	assert.True(t, bytes.Equal(readContent, content), "ReadFile did not return expected content")
 
 	// 4. Read directory entries
 	entries, err := fs.ReadDir(dirPath)
-	if err != nil {
-		t.Fatalf("ReadDir failed: %v", err)
-	}
+	require.NoError(t, err, "ReadDir failed")
 
-	if len(entries) != 1 || entries[0].Name() != "test-file.txt" {
-		t.Errorf("ReadDir did not return expected entries")
-	}
+	assert.Len(t, entries, 1, "Expected a single directory entry")
+	assert.Equal(t, "test-file.txt", entries[0].Name(), "Directory entry name mismatch")
 
 	// 5. Open and read file
 	file, err := fs.Open(filePath)
-	if err != nil {
-		t.Fatalf("Open failed: %v", err)
-	}
+	require.NoError(t, err, "Open failed")
 
 	// Use a different variable name here to avoid the "no new variables" error
 	fileContent, readErr := io.ReadAll(file)
 	file.Close()
-	if readErr != nil {
-		t.Fatalf("Reading file content failed: %v", readErr)
-	}
+	require.NoError(t, readErr, "Reading file content failed")
 
-	if !bytes.Equal(fileContent, content) {
-		t.Errorf("File content does not match: expected '%s', got '%s'", content, fileContent)
-	}
+	assert.Equal(t, content, fileContent, "File content does not match expected value")
 
 	// 6. Clean up
 	err = fs.RemoveAll(dirPath)
-	if err != nil {
-		t.Fatalf("RemoveAll failed: %v", err)
-	}
+	require.NoError(t, err, "RemoveAll failed")
 
 	// Verify directory is removed
 	_, err = fs.Stat(dirPath)
-	if !os.IsNotExist(err) {
-		t.Errorf("Directory was not properly removed")
-	}
+	assert.True(t, os.IsNotExist(err), "Directory was not properly removed")
 }

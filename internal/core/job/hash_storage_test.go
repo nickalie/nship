@@ -5,6 +5,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // MockFileSystemForHashing implements FileSystemInterface for testing
@@ -127,18 +129,12 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		step2 := &Step{Run: "echo hello"}
 
 		hash1, err := hasher.ComputeHash(step1, nilFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for step1")
 
 		hash2, err := hasher.ComputeHash(step2, nilFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for step2")
 
-		if hash1 != hash2 {
-			t.Errorf("Identical steps should have the same hash, got %s and %s", hash1, hash2)
-		}
+		assert.Equal(t, hash1, hash2, "Identical steps should have the same hash")
 	})
 
 	// Test that different steps have different hashes
@@ -147,18 +143,12 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		step2 := &Step{Run: "echo world"}
 
 		hash1, err := hasher.ComputeHash(step1, nilFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for step1")
 
 		hash2, err := hasher.ComputeHash(step2, nilFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for step2")
 
-		if hash1 == hash2 {
-			t.Errorf("Different steps should have different hashes, both got %s", hash1)
-		}
+		assert.NotEqual(t, hash1, hash2, "Different steps should have different hashes")
 	})
 
 	// Test steps with different types
@@ -168,23 +158,17 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		dockerStep := &Step{Docker: &DockerStep{Image: "nginx", Name: "web"}}
 
 		hashRun, err := hasher.ComputeHash(runStep, nilFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for runStep")
 
 		hashCopy, err := hasher.ComputeHash(copyStep, nilFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for copyStep")
 
 		hashDocker, err := hasher.ComputeHash(dockerStep, nilFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for dockerStep")
 
-		if hashRun == hashCopy || hashRun == hashDocker || hashCopy == hashDocker {
-			t.Errorf("Different step types should have different hashes")
-		}
+		assert.NotEqual(t, hashRun, hashCopy, "Run and Copy steps should have different hashes")
+		assert.NotEqual(t, hashRun, hashDocker, "Run and Docker steps should have different hashes")
+		assert.NotEqual(t, hashCopy, hashDocker, "Copy and Docker steps should have different hashes")
 	})
 
 	// Test that complex steps can be hashed
@@ -213,13 +197,8 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		}
 
 		hash, err := hasher.ComputeHash(complexStep, nilFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash for complex step: %v", err)
-		}
-
-		if hash == "" {
-			t.Error("Hash for complex step should not be empty")
-		}
+		assert.NoError(t, err, "Failed to compute hash for complex step")
+		assert.NotEmpty(t, hash, "Hash for complex step should not be empty")
 	})
 
 	// Test that shell changes affect the hash
@@ -228,18 +207,12 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		step2 := &Step{Run: "echo hello", Shell: "bash"}
 
 		hash1, err := hasher.ComputeHash(step1, nilFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for step1")
 
 		hash2, err := hasher.ComputeHash(step2, nilFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for step2")
 
-		if hash1 == hash2 {
-			t.Errorf("Steps with different shells should have different hashes, both got %s", hash1)
-		}
+		assert.NotEqual(t, hash1, hash2, "Steps with different shells should have different hashes")
 	})
 
 	// Test file-based hashing for CopyStep
@@ -264,19 +237,13 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 
 		// Compute hashes
 		hash1, err := hasher.ComputeHash(copyStep1, mockFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for copyStep1")
 
 		hash2, err := hasher.ComputeHash(copyStep2, mockFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for copyStep2")
 
 		// Hashes should be the same for identical files
-		if hash1 != hash2 {
-			t.Errorf("Identical copy steps should have the same hash, got %s and %s", hash1, hash2)
-		}
+		assert.Equal(t, hash1, hash2, "Identical copy steps should have the same hash")
 
 		// Now create a mock with different file content
 		mockFSModified := &MockFileSystemForHashing{
@@ -291,14 +258,10 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 
 		// Compute hash with different file content
 		hash3, err := hasher.ComputeHash(copyStep1, mockFSModified)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for copyStep1 with modified file")
 
 		// Hashes should be different
-		if hash1 == hash3 {
-			t.Errorf("Copy steps with different file content should have different hashes")
-		}
+		assert.NotEqual(t, hash1, hash3, "Copy steps with different file content should have different hashes")
 	})
 
 	// Test directory-based hashing for CopyStep
@@ -338,9 +301,7 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 
 		// Compute hash
 		hash1, err := hasher.ComputeHash(dirCopyStep, mockFS)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for directory copy step")
 
 		// Create a mock with different directory content
 		mockFSModified := &MockFileSystemForHashing{
@@ -372,13 +333,9 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 
 		// Compute hash with different directory content
 		hash2, err := hasher.ComputeHash(dirCopyStep, mockFSModified)
-		if err != nil {
-			t.Fatalf("Failed to compute hash: %v", err)
-		}
+		assert.NoError(t, err, "Failed to compute hash for directory copy step with modified content")
 
 		// Hashes should be different
-		if hash1 == hash2 {
-			t.Errorf("Copy steps with different directory content should have different hashes")
-		}
+		assert.NotEqual(t, hash1, hash2, "Copy steps with different directory content should have different hashes")
 	})
 }

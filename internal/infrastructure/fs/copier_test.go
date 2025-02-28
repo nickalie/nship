@@ -8,6 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // MockSFTPClient implements SFTPClient for testing
@@ -119,17 +122,9 @@ func TestCopyFile(t *testing.T) {
 	copier := NewCopier(mockFS, mockSFTP)
 	err := copier.CopyFile("src/file.txt", "dst/file.txt")
 
-	if err != nil {
-		t.Errorf("CopyFile returned error: %v", err)
-	}
-
-	if !fileCreated {
-		t.Error("Destination file was not created")
-	}
-
-	if !fileWritten {
-		t.Error("Content was not correctly written to destination")
-	}
+	assert.NoError(t, err, "CopyFile should not return an error")
+	assert.True(t, fileCreated, "Destination file was not created")
+	assert.True(t, fileWritten, "Content was not correctly written to destination")
 }
 
 func TestCopyDir(t *testing.T) {
@@ -202,24 +197,18 @@ func TestCopyDir(t *testing.T) {
 	copier := NewCopier(mockFS, mockSFTP)
 	err := copier.CopyDir("src", "dst", nil)
 
-	if err != nil {
-		t.Errorf("CopyDir returned error: %v", err)
-	}
+	assert.NoError(t, err, "CopyDir should not return an error")
 
 	// Check directories were created
 	expectedDirs := []string{"dst", "dst/subdir"}
 	for _, dir := range expectedDirs {
-		if !createdDirs[dir] {
-			t.Errorf("Directory not created: %s", dir)
-		}
+		assert.True(t, createdDirs[dir], "Directory not created: %s", dir)
 	}
 
 	// Check files were created
 	expectedFiles := []string{"dst/file1.txt", "dst/subdir/file2.txt"}
 	for _, file := range expectedFiles {
-		if !createdFiles[file] {
-			t.Errorf("File not created: %s", file)
-		}
+		assert.True(t, createdFiles[file], "File not created: %s", file)
 	}
 }
 
@@ -265,9 +254,7 @@ func TestIsExcluded(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			result := isExcluded(tt.path, tt.exclude)
-			if result != tt.expected {
-				t.Errorf("isExcluded(%q, %v) = %v, want %v", tt.path, tt.exclude, result, tt.expected)
-			}
+			assert.Equal(t, tt.expected, result, "isExcluded() returned unexpected result")
 		})
 	}
 }
@@ -275,9 +262,8 @@ func TestIsExcluded(t *testing.T) {
 // setupTestEnvironment creates a temporary directory for testing
 func setupTestEnvironment(t *testing.T) (string, func()) {
 	tempDir, err := os.MkdirTemp("", "fs-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	require.NoError(t, err, "Failed to create temp dir")
+
 	cleanup := func() {
 		os.RemoveAll(tempDir)
 	}

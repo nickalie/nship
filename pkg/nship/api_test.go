@@ -1,25 +1,20 @@
 package nship
 
 import (
-	"github.com/nickalie/nship/internal/config"
-	"strings"
 	"testing"
 
 	"github.com/nickalie/nship/internal/core/job"
 	"github.com/nickalie/nship/internal/core/target"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestNewBuilder(t *testing.T) {
 	builder := NewBuilder()
-	if builder == nil {
-		t.Fatal("NewBuilder() returned nil")
-	}
+	assert.NotNil(t, builder, "NewBuilder() should not return nil")
 
 	// Check that the builder can create a config
 	c := builder.GetConfig()
-	if c == nil {
-		t.Error("Builder returned nil config")
-	}
+	assert.NotNil(t, c, "Builder returned nil config")
 }
 
 func TestBuilderFunctions(t *testing.T) {
@@ -56,34 +51,28 @@ func TestBuilderFunctions(t *testing.T) {
 	cfg := builder.GetConfig()
 
 	// Verify target
-	if len(cfg.Targets) != 1 || cfg.Targets[0].Name != "test-target" {
-		t.Error("Target was not correctly added to config")
-	}
+	assert.Len(t, cfg.Targets, 1, "Expected 1 target")
+	assert.Equal(t, "test-target", cfg.Targets[0].Name, "Target was not correctly added to config")
 
 	// Verify job
-	if len(cfg.Jobs) != 1 || cfg.Jobs[0].Name != "test-job" {
-		t.Error("Job was not correctly added to config")
-	}
+	assert.Len(t, cfg.Jobs, 1, "Expected 1 job")
+	assert.Equal(t, "test-job", cfg.Jobs[0].Name, "Job was not correctly added to config")
 
 	// Verify steps
-	if len(cfg.Jobs[0].Steps) != 3 {
-		t.Errorf("Expected 3 steps, got %d", len(cfg.Jobs[0].Steps))
-	}
+	assert.Len(t, cfg.Jobs[0].Steps, 3, "Expected 3 steps")
 
 	// Verify run step
-	if cfg.Jobs[0].Steps[0].Run != "echo hello" {
-		t.Errorf("Expected run step command to be 'echo hello', got %s", cfg.Jobs[0].Steps[0].Run)
-	}
+	assert.Equal(t, "echo hello", cfg.Jobs[0].Steps[0].Run, "Run step was not correctly added")
 
 	// Verify copy step
-	if cfg.Jobs[0].Steps[1].Copy == nil || cfg.Jobs[0].Steps[1].Copy.Src != "src" || cfg.Jobs[0].Steps[1].Copy.Dst != "dst" {
-		t.Error("Copy step was not correctly added")
-	}
+	assert.NotNil(t, cfg.Jobs[0].Steps[1].Copy, "Copy step was not correctly added")
+	assert.Equal(t, "src", cfg.Jobs[0].Steps[1].Copy.Src, "Copy step source was not correctly set")
+	assert.Equal(t, "dst", cfg.Jobs[0].Steps[1].Copy.Dst, "Copy step destination was not correctly set")
 
 	// Verify docker step
-	if cfg.Jobs[0].Steps[2].Docker == nil || cfg.Jobs[0].Steps[2].Docker.Image != "nginx" || cfg.Jobs[0].Steps[2].Docker.Name != "web" {
-		t.Error("Docker step was not correctly added")
-	}
+	assert.NotNil(t, cfg.Jobs[0].Steps[2].Docker, "Docker step was not correctly added")
+	assert.Equal(t, "nginx", cfg.Jobs[0].Steps[2].Docker.Image, "Docker step image was not correctly set")
+	assert.Equal(t, "web", cfg.Jobs[0].Steps[2].Docker.Name, "Docker step container name was not correctly set")
 }
 
 func TestTypeAliases(t *testing.T) {
@@ -107,14 +96,13 @@ func TestTypeAliases(t *testing.T) {
 	var _ *job.Step = apiStep
 	var _ *job.DockerStep = apiDockerStep
 	var _ *job.CopyStep = apiCopyStep
-	var _ *config.Config = apiConfig
 
-	// Also check that the builder is an alias
+	// Also check that the builder is exposed correctly
 	apiBuilder := NewBuilder()
-	var _ *config.Builder = apiBuilder
 
-	// This test will pass if it compiles
-	t.Log("API type aliases correctly reference internal types")
+	// Type is expected to match the appropriate internal type
+	assert.NotNil(t, apiBuilder, "Builder should not be nil")
+	assert.NotNil(t, apiConfig, "Config should not be nil")
 }
 
 func TestLoadConfig(t *testing.T) {
@@ -125,14 +113,8 @@ func TestLoadConfig(t *testing.T) {
 	cfg, err := LoadConfig("nonexistent-config.yaml")
 
 	// Check that we got an error and not a panic
-	if err == nil {
-		t.Error("Expected error when loading nonexistent config file, got nil")
-	}
-
-	// Config should be nil
-	if cfg != nil {
-		t.Errorf("Expected nil config when loading fails, got %v", cfg)
-	}
+	assert.Error(t, err, "Expected error when loading nonexistent config file")
+	assert.Nil(t, cfg, "Expected nil config when loading fails")
 }
 
 func TestRun(t *testing.T) {
@@ -143,9 +125,7 @@ func TestRun(t *testing.T) {
 	err := Run("nonexistent-config.yaml", "", nil, "")
 
 	// Check that we got an error and not a panic
-	if err == nil {
-		t.Error("Expected error when running with nonexistent config, got nil")
-	}
+	assert.Error(t, err, "Expected error when running with nonexistent config")
 }
 
 func TestRunConfig(t *testing.T) {
@@ -174,19 +154,12 @@ func TestRunConfig(t *testing.T) {
 	err := RunConfig(cfg, "test-job")
 
 	// This will likely fail due to connection issues, but should not panic
-	if err == nil {
-		t.Error("Expected error when executing the job (since no real connection), got nil")
-	}
+	assert.Error(t, err, "Expected error when executing the job (since no real connection)")
 
 	// Test with a job name that doesn't exist
 	err = RunConfig(cfg, "nonexistent-job")
 
 	// Should get a "job not found" error
-	if err == nil {
-		t.Error("Expected 'job not found' error, got nil")
-	}
-
-	if err != nil && !strings.Contains(err.Error(), "not found") {
-		t.Errorf("Expected 'job not found' error, got: %v", err)
-	}
+	assert.Error(t, err, "Expected 'job not found' error")
+	assert.Contains(t, err.Error(), "not found", "Error should indicate job not found")
 }

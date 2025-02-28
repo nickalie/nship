@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 // MockVaultDecrypter implements the VaultDecrypter interface for testing
@@ -24,9 +26,7 @@ func TestNewVaultDecrypter(t *testing.T) {
 
 	// Ensure the returned instance is of the correct type
 	_, ok := decrypter.(*DefaultVaultDecrypter)
-	if !ok {
-		t.Errorf("NewVaultDecrypter() did not return a *DefaultVaultDecrypter, got %T", decrypter)
-	}
+	assert.True(t, ok, "NewVaultDecrypter() did not return a *DefaultVaultDecrypter")
 }
 
 func TestDefaultVaultDecrypterDecrypt(t *testing.T) {
@@ -37,9 +37,7 @@ func TestDefaultVaultDecrypterDecrypt(t *testing.T) {
 
 	// Test with invalid encrypted content
 	_, err := decrypter.Decrypt("invalid content", "password")
-	if err == nil {
-		t.Errorf("Expected error when decrypting invalid content, but got nil")
-	}
+	assert.Error(t, err, "Expected error when decrypting invalid content")
 }
 
 func TestLoadVaultFileEmptyPassword(t *testing.T) {
@@ -53,13 +51,8 @@ func TestLoadVaultFileEmptyPassword(t *testing.T) {
 
 	_, err := LoadVaultFile("dummy/path", "", decrypter)
 
-	if err == nil {
-		t.Errorf("Expected error with empty password, got nil")
-	}
-
-	if err != nil && err.Error() != "vault password is required" {
-		t.Errorf("Expected error message 'vault password is required', got '%s'", err.Error())
-	}
+	assert.Error(t, err, "Expected error with empty password")
+	assert.Equal(t, "vault password is required", err.Error(), "Expected specific error message")
 }
 
 func TestLoadVaultFileNonExistentFile(t *testing.T) {
@@ -73,29 +66,21 @@ func TestLoadVaultFileNonExistentFile(t *testing.T) {
 
 	_, err := LoadVaultFile("non/existent/file", "password", decrypter)
 
-	if err == nil {
-		t.Errorf("Expected error with non-existent file, got nil")
-	}
-
-	if err != nil && !os.IsNotExist(unwrapError(err)) {
-		t.Errorf("Expected file not found error, got: %v", err)
-	}
+	assert.Error(t, err, "Expected error with non-existent file")
+	assert.True(t, os.IsNotExist(unwrapError(err)), "Expected file not found error")
 }
 
 func TestLoadVaultFileDecryptionError(t *testing.T) {
 	// Create a temporary file
 	tmpDir, err := os.MkdirTemp("", "vault-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	assert.NoError(t, err, "Failed to create temp dir")
 	defer os.RemoveAll(tmpDir)
 
 	filePath := filepath.Join(tmpDir, "vault-file")
 	content := "encrypted content"
 
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-		t.Fatalf("Failed to write test file: %v", err)
-	}
+	err = os.WriteFile(filePath, []byte(content), 0644)
+	assert.NoError(t, err, "Failed to write test file")
 
 	// Mock decrypter that returns an error
 	decryptErr := fmt.Errorf("decryption failed")
@@ -107,42 +92,30 @@ func TestLoadVaultFileDecryptionError(t *testing.T) {
 
 	_, err = LoadVaultFile(filePath, "password", decrypter)
 
-	if err == nil {
-		t.Errorf("Expected error during decryption, got nil")
-	}
-
-	if err != nil && !errorContains(err, decryptErr.Error()) {
-		t.Errorf("Expected error to contain '%s', got: %v", decryptErr.Error(), err)
-	}
+	assert.Error(t, err, "Expected error during decryption")
+	assert.True(t, errorContains(err, decryptErr.Error()),
+		"Error should contain the decryption error message")
 }
 
 func TestLoadVaultFileSuccess(t *testing.T) {
 	// Create a temporary file
 	tmpDir, err := os.MkdirTemp("", "vault-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	assert.NoError(t, err, "Failed to create temp dir")
 	defer os.RemoveAll(tmpDir)
 
 	filePath := filepath.Join(tmpDir, "vault-file")
 	content := "encrypted content"
 	decryptedContent := "decrypted content"
 
-	if err := os.WriteFile(filePath, []byte(content), 0644); err != nil {
-		t.Fatalf("Failed to write test file: %v", err)
-	}
+	err = os.WriteFile(filePath, []byte(content), 0644)
+	assert.NoError(t, err, "Failed to write test file")
 
 	// Mock decrypter that returns successfully
 	decrypter := &MockVaultDecrypter{
 		decryptFunc: func(receivedContent, receivedPassword string) (string, error) {
 			// Verify the content and password passed to Decrypt
-			if receivedContent != content {
-				t.Errorf("Expected content '%s', got '%s'", content, receivedContent)
-			}
-
-			if receivedPassword != "correctpassword" {
-				t.Errorf("Expected password 'correctpassword', got '%s'", receivedPassword)
-			}
+			assert.Equal(t, content, receivedContent, "Content mismatch")
+			assert.Equal(t, "correctpassword", receivedPassword, "Password mismatch")
 
 			return decryptedContent, nil
 		},
@@ -150,23 +123,13 @@ func TestLoadVaultFileSuccess(t *testing.T) {
 
 	result, err := LoadVaultFile(filePath, "correctpassword", decrypter)
 
-	if err != nil {
-		t.Errorf("Expected no error, got: %v", err)
-	}
-
-	if result != decryptedContent {
-		t.Errorf("Expected decrypted content '%s', got '%s'", decryptedContent, result)
-	}
+	assert.NoError(t, err, "Expected no error")
+	assert.Equal(t, decryptedContent, result, "Decrypted content mismatch")
 }
 
 // Helper function to check if an error contains a specific substring
 func errorContains(err error, substr string) bool {
-	return err != nil && contains(fmt.Sprint(err), substr)
-}
-
-// Simple string contains helper
-func contains(s, substr string) bool {
-	return strings.Contains(s, substr)
+	return err != nil && strings.Contains(err.Error(), substr)
 }
 
 // Helper function to get the original error from a wrapped error

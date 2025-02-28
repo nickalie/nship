@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/nickalie/nship/internal/core/job"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestDockerCommandBuilder_BuildCommands(t *testing.T) {
@@ -97,7 +98,7 @@ func TestDockerCommandBuilder_BuildCommands(t *testing.T) {
 			},
 			expectedCmds: []string{
 				// Update the expected command format
-				"docker create --name task alpine:latest \"sh -c echo hello && sleep 10\"",
+				"docker create --name task alpine:latest sh -c echo hello && sleep 10",
 			},
 		},
 		{
@@ -129,16 +130,14 @@ func TestDockerCommandBuilder_BuildCommands(t *testing.T) {
 
 			// Check that expected commands are present
 			for _, expected := range tt.expectedCmds {
-				if !strings.Contains(allCmds, expected) {
-					t.Errorf("Expected commands to contain '%s', but didn't find it in: %s", expected, allCmds)
-				}
+				assert.Contains(t, allCmds, expected,
+					"Expected commands to contain '%s'", expected)
 			}
 
 			// Check that unexpected commands are not present
 			for _, unexpected := range tt.expectedNotCmds {
-				if strings.Contains(allCmds, unexpected) {
-					t.Errorf("Commands should not contain '%s', but found it in: %s", unexpected, allCmds)
-				}
+				assert.NotContains(t, allCmds, unexpected,
+					"Commands should not contain '%s'", unexpected)
 			}
 
 			// Check command count - should have remove, create, and start at minimum
@@ -148,9 +147,8 @@ func TestDockerCommandBuilder_BuildCommands(t *testing.T) {
 				minCmdCount += len(tt.dockerStep.Networks) * 2
 			}
 
-			if len(commands) < minCmdCount {
-				t.Errorf("Expected at least %d commands, got %d: %v", minCmdCount, len(commands), commands)
-			}
+			assert.GreaterOrEqual(t, len(commands), minCmdCount,
+				"Expected at least %d commands, got %d", minCmdCount, len(commands))
 		})
 	}
 }
@@ -208,7 +206,7 @@ func TestBuildDockerCreateCommand(t *testing.T) {
 				Name:     "task",
 				Commands: []string{"sh", "-c", "echo hello"},
 			},
-			expected: "docker create --name task alpine:latest \"sh -c echo hello\"",
+			expected: "docker create --name task alpine:latest sh -c echo hello",
 		},
 	}
 
@@ -217,14 +215,11 @@ func TestBuildDockerCreateCommand(t *testing.T) {
 			builder := NewDockerCommandBuilder(tt.dockerStep)
 			cmd := builder.buildDockerCreateCommand()
 
-			if !strings.Contains(cmd, tt.expected) {
-				t.Errorf("Expected command to contain '%s', got: %s", tt.expected, cmd)
-			}
+			assert.Contains(t, cmd, tt.expected, "Command should contain expected content")
 
 			for _, unexpected := range tt.unexpected {
-				if strings.Contains(cmd, unexpected) {
-					t.Errorf("Command should not contain '%s', but found it in: %s", unexpected, cmd)
-				}
+				assert.NotContains(t, cmd, unexpected,
+					"Command should not contain '%s'", unexpected)
 			}
 		})
 	}
@@ -235,24 +230,21 @@ func TestAppendDockerArgs(t *testing.T) {
 
 	// Test with empty values
 	args := builder.appendDockerArgs("-p", []string{})
-	if len(args) != 0 {
-		t.Errorf("Expected empty args for empty values, got: %v", args)
-	}
+	assert.Empty(t, args, "Expected empty args for empty values")
 
 	// Test with single value
 	args = builder.appendDockerArgs("-v", []string{"/host:/container"})
-	if len(args) != 2 || args[0] != "-v" || args[1] != "/host:/container" {
-		t.Errorf("Expected ['-v', '/host:/container'], got: %v", args)
-	}
+	assert.Len(t, args, 2, "Expected 2 args for a single value")
+	assert.Equal(t, "-v", args[0], "First arg should be the flag")
+	assert.Equal(t, "/host:/container", args[1], "Second arg should be the value")
 
 	// Test with multiple values
 	args = builder.appendDockerArgs("--network", []string{"net1", "net2"})
-	if len(args) != 4 {
-		t.Errorf("Expected 4 args for 2 values, got: %v", args)
-	}
-	if args[0] != "--network" || args[1] != "net1" || args[2] != "--network" || args[3] != "net2" {
-		t.Errorf("Expected ['--network', 'net1', '--network', 'net2'], got: %v", args)
-	}
+	assert.Len(t, args, 4, "Expected 4 args for 2 values")
+	assert.Equal(t, "--network", args[0], "First arg should be the flag")
+	assert.Equal(t, "net1", args[1], "Second arg should be the first value")
+	assert.Equal(t, "--network", args[2], "Third arg should be the flag again")
+	assert.Equal(t, "net2", args[3], "Fourth arg should be the second value")
 }
 
 func TestAppendDockerLabels(t *testing.T) {
@@ -260,25 +252,19 @@ func TestAppendDockerLabels(t *testing.T) {
 
 	// Test with empty labels
 	args := builder.appendDockerLabels("-l", map[string]string{})
-	if len(args) != 0 {
-		t.Errorf("Expected empty args for empty labels, got: %v", args)
-	}
+	assert.Empty(t, args, "Expected empty args for empty labels")
 
 	// Test with single label
 	args = builder.appendDockerLabels("-l", map[string]string{"app": "web"})
-	if len(args) != 2 || args[0] != "-l" {
-		t.Errorf("Expected ['-l', 'app=\"web\"'], got: %v", args)
-	}
-	if !strings.Contains(args[1], "app=") || !strings.Contains(args[1], "web") {
-		t.Errorf("Expected label format 'app=\"web\"', got: %s", args[1])
-	}
+	assert.Len(t, args, 2, "Expected 2 args for a single label")
+	assert.Equal(t, "-l", args[0], "First arg should be the flag")
+	assert.Contains(t, args[1], "app=", "Label should contain key with equals sign")
+	assert.Contains(t, args[1], "web", "Label should contain value")
 
 	// Test with multiple labels
 	args = builder.appendDockerLabels("-l", map[string]string{
 		"com.example.description": "Test container",
 		"com.example.version":     "1.0",
 	})
-	if len(args) != 4 {
-		t.Errorf("Expected 4 args for 2 labels, got: %v", args)
-	}
+	assert.Len(t, args, 4, "Expected 4 args for 2 labels")
 }

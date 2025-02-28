@@ -2,6 +2,8 @@ package target
 
 import (
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestGetPort(t *testing.T) {
@@ -40,9 +42,7 @@ func TestGetPort(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.target.GetPort(); got != tt.expectedPort {
-				t.Errorf("Target.GetPort() = %v, want %v", got, tt.expectedPort)
-			}
+			assert.Equal(t, tt.expectedPort, tt.target.GetPort(), "GetPort() returned unexpected value")
 		})
 	}
 }
@@ -83,9 +83,7 @@ func TestGetName(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.target.GetName(); got != tt.expectedName {
-				t.Errorf("Target.GetName() = %v, want %v", got, tt.expectedName)
-			}
+			assert.Equal(t, tt.expectedName, tt.target.GetName(), "GetName() returned unexpected value")
 		})
 	}
 }

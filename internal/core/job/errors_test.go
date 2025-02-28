@@ -2,8 +2,9 @@ package job
 
 import (
 	"errors"
-	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestConnectionError(t *testing.T) {
@@ -16,18 +17,11 @@ func TestConnectionError(t *testing.T) {
 	}
 
 	expected := "connection to target web-server failed: connection refused"
-	if err.Error() != expected {
-		t.Errorf("ConnectionError.Error() = %q, want %q", err.Error(), expected)
-	}
+	assert.Equal(t, expected, err.Error(), "ConnectionError message doesn't match expected format")
 
 	// Verify that the error message contains both the target and cause
-	if !strings.Contains(err.Error(), target) {
-		t.Errorf("ConnectionError.Error() does not contain target %q", target)
-	}
-
-	if !strings.Contains(err.Error(), cause.Error()) {
-		t.Errorf("ConnectionError.Error() does not contain cause %q", cause.Error())
-	}
+	assert.Contains(t, err.Error(), target, "ConnectionError should contain the target name")
+	assert.Contains(t, err.Error(), cause.Error(), "ConnectionError should contain the cause")
 }
 
 func TestStepError(t *testing.T) {
@@ -41,9 +35,7 @@ func TestStepError(t *testing.T) {
 	}
 
 	expected := "job 'deploy' step 2/5 on 'api-server' failed: command not found"
-	if err.Error() != expected {
-		t.Errorf("StepError.Error() = %q, want %q", err.Error(), expected)
-	}
+	assert.Equal(t, expected, err.Error(), "StepError message doesn't match expected format")
 }
 
 func TestCommandError(t *testing.T) {
@@ -78,9 +70,7 @@ func TestCommandError(t *testing.T) {
 				Cause:   tt.cause,
 			}
 
-			if err.Error() != tt.expected {
-				t.Errorf("CommandError.Error() = %q, want %q", err.Error(), tt.expected)
-			}
+			assert.Equal(t, tt.expected, err.Error(), "CommandError message doesn't match expected format")
 		})
 	}
 }
@@ -94,9 +84,7 @@ func TestCopyError(t *testing.T) {
 	}
 
 	expected := "copying './config.yml' to '/etc/app/config.yml' failed: permission denied"
-	if err.Error() != expected {
-		t.Errorf("CopyError.Error() = %q, want %q", err.Error(), expected)
-	}
+	assert.Equal(t, expected, err.Error(), "CopyError message doesn't match expected format")
 }
 
 func TestDockerError(t *testing.T) {
@@ -108,7 +96,5 @@ func TestDockerError(t *testing.T) {
 	}
 
 	expected := "Docker operation 'create' on container 'web-app' failed: image not found"
-	if err.Error() != expected {
-		t.Errorf("DockerError.Error() = %q, want %q", err.Error(), expected)
-	}
+	assert.Equal(t, expected, err.Error(), "DockerError message doesn't match expected format")
 }
