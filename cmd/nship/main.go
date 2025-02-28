@@ -16,6 +16,7 @@ type Application struct {
 	jobName       string
 	envPaths      []string
 	vaultPassword string
+	noSkip        bool
 	verbose       bool
 	version       bool
 	versionString string
@@ -39,6 +40,7 @@ func (app *Application) ParseFlags() {
 	var envPathsStr string
 	flag.StringVar(&envPathsStr, "env", "", "Comma-separated paths to environment files")
 	flag.StringVar(&app.vaultPassword, "vault-password", app.vaultPassword, "Password for Ansible Vault file")
+	flag.BoolVar(&app.noSkip, "no-skip", app.noSkip, "Disable skipping unchanged steps")
 	flag.BoolVar(&app.verbose, "verbose", app.verbose, "Enable verbose logging")
 	flag.BoolVar(&app.version, "version", app.version, "Show version information")
 
@@ -67,7 +69,12 @@ func (app *Application) Run() error {
 
 	// Create and run application
 	cliApp := cli.NewApp()
-	return cliApp.Run(app.configPath, app.jobName, app.envPaths, app.vaultPassword)
+
+	// If no-skip is enabled, use the standard cliApp
+	if app.noSkip {
+		return cliApp.Run(app.configPath, app.jobName, app.envPaths, app.vaultPassword)
+	}
+	return cli.RunWithSkipUnchanged(app.configPath, app.jobName, app.envPaths, app.vaultPassword, !app.noSkip)
 }
 
 func main() {

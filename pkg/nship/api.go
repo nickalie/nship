@@ -11,6 +11,7 @@ import (
 	"github.com/nickalie/nship/internal/config"
 	"github.com/nickalie/nship/internal/core/job"
 	"github.com/nickalie/nship/internal/core/target"
+	"github.com/nickalie/nship/internal/infrastructure/fs"
 	"github.com/nickalie/nship/internal/infrastructure/ssh"
 	"github.com/nickalie/nship/internal/platform/cli"
 )
@@ -33,6 +34,9 @@ type CopyStep = job.CopyStep
 // Config represents a deployment configuration
 type Config = config.Config
 
+// HashStorage represents a storage for step hashes
+type HashStorage = job.HashStorage
+
 // Builder represents a configuration builder
 type Builder = config.Builder
 
@@ -41,9 +45,20 @@ func NewBuilder() *Builder {
 	return config.NewBuilder()
 }
 
-// Run executes a deployment with the specified parameters
+// NewFileHashStorage creates a new file-based hash storage
+func NewFileHashStorage() HashStorage {
+	return fs.NewFileHashStorage()
+}
+
+// Run executes a deployment with the specified parameters (with default behavior)
 func Run(configPath, jobName string, envPaths []string, vaultPassword string) error {
 	return cli.Run(configPath, jobName, envPaths, vaultPassword)
+}
+
+// RunWithSkipUnchanged executes a deployment with the specified parameters
+// and controls whether unchanged steps should be skipped
+func RunWithSkipUnchanged(configPath, jobName string, envPaths []string, vaultPassword string, skipUnchanged bool) error {
+	return cli.RunWithSkipUnchanged(configPath, jobName, envPaths, vaultPassword, skipUnchanged)
 }
 
 // LoadConfig loads a configuration file
@@ -52,8 +67,36 @@ func LoadConfig(configPath string) (*Config, error) {
 	return loader.Load(configPath)
 }
 
-// RunConfig executes the deployment based on the provided configuration
+// RunConfigWithOptions executes the deployment with options for skipping unchanged steps
+func RunConfigWithOptions(cfg *Config, jobName string, skipUnchanged bool, hashStorage HashStorage) error {
+	return runConfigInternal(cfg, jobName, skipUnchanged, hashStorage)
+}
+
+// RunConfig executes the deployment (runs all steps regardless of change status)
 func RunConfig(cfg *Config, jobName string) error {
+	var jobs []*job.Job
+
+	// Filter jobs by name if specified
+	if jobName != "" {
+		for _, j := range cfg.Jobs {
+			if j.Name == jobName {
+				jobs = []*job.Job{j}
+				break
+			}
+		}
+		if jobs == nil {
+			return fmt.Errorf("job '%s' not found", jobName)
+		}
+	} else {
+		jobs = cfg.Jobs
+	}
+
+	// Create service and execute jobs
+	return runConfigInternal(cfg, jobName, false, nil)
+}
+
+// runConfigInternal is the internal implementation of RunConfig and RunConfigWithOptions
+func runConfigInternal(cfg *Config, jobName string, skipUnchanged bool, hashStorage HashStorage) error {
 	var jobs []*job.Job
 	var err error
 
@@ -72,10 +115,9 @@ func RunConfig(cfg *Config, jobName string) error {
 		jobs = cfg.Jobs
 	}
 
-	// Create service and execute jobs
 	clientFactory := ssh.NewClientFactory()
-	jobService := job.NewService(clientFactory)
-
+	jobService := job.NewService(clientFactory, job.WithSkipUnchanged(skipUnchanged),
+		job.WithHashStorage(hashStorage))
 	err = jobService.ExecuteJobs(cfg.Targets, jobs)
 	if err != nil {
 		return fmt.Errorf("job execution failed: %w", err)
