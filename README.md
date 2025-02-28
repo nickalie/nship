@@ -1,4 +1,5 @@
-# nship
+# nship ![logo64](https://github.com/user-attachments/assets/82bc1544-a664-4644-b66f-ca364aa01c4d)
+
 
 nship is a flexible and efficient deployment automation tool designed to streamline the execution of deployment jobs across multiple targets. It simplifies the configuration and execution of deployment workflows by providing structured job and target management.
 
