@@ -844,3 +844,121 @@ func TestInvalidJSONConfig(t *testing.T) {
 	assert.Error(t, err, "Expected parsing error but got nil")
 	assert.Contains(t, err.Error(), "failed to parse JSON", "Error message does not mention JSON parsing failure")
 }
+
+func TestLoadTOMLConfig(t *testing.T) {
+	// Create temporary TOML config file
+	tmpDir, err := os.MkdirTemp("", "config-test-toml")
+	assert.NoError(t, err, "Failed to create temp dir")
+	defer os.RemoveAll(tmpDir)
+
+	// Create a temporary private key file
+	privateKeyPath := filepath.Join(tmpDir, "key.pem")
+	err = os.WriteFile(privateKeyPath, []byte("dummy private key"), 0600)
+	assert.NoError(t, err, "Failed to create private key file")
+
+	// Replace backslashes with forward slashes for TOML compatibility
+	tomlSafePath := strings.ReplaceAll(privateKeyPath, "\\", "/")
+
+	configPath := filepath.Join(tmpDir, "config.toml")
+	configContent := `
+# TOML Configuration
+
+[[targets]]
+name = "web-server"
+host = "web.example.com"
+user = "admin"
+port = 2222
+private_key = "` + tomlSafePath + `"
+
+[[targets]]
+host = "db.example.com"
+user = "admin"
+password = "password123"
+
+[[jobs]]
+name = "setup"
+steps = [
+  { run = "mkdir -p /var/www" },
+  { run = "chown www-data:www-data /var/www" }
+]
+
+[[jobs]]
+name = "deploy"
+steps = [
+  { copy = { src = "./config/nginx.conf", dst = "/etc/nginx/nginx.conf" } },
+  { docker = { image = "nginx:latest", name = "web", ports = ["80:80"] } }
+]
+`
+
+	err = os.WriteFile(configPath, []byte(configContent), 0644)
+	assert.NoError(t, err, "Failed to write config file")
+
+	// Load the config
+	loader := NewLoader()
+	config, err := loader.Load(configPath)
+	assert.NoError(t, err, "Failed to load config")
+
+	// Verify targets
+	assert.Len(t, config.Targets, 2, "Expected 2 targets")
+
+	// First target
+	assert.Equal(t, "web-server", config.Targets[0].Name, "Incorrect first target name")
+	assert.Equal(t, "web.example.com", config.Targets[0].Host, "Incorrect first target host")
+	assert.Equal(t, 2222, config.Targets[0].Port, "Incorrect first target port")
+	assert.Equal(t, tomlSafePath, config.Targets[0].PrivateKey, "Incorrect first target private key")
+
+	// Second target
+	assert.Equal(t, "db.example.com", config.Targets[1].Host, "Incorrect second target host")
+	assert.Equal(t, "password123", config.Targets[1].Password, "Incorrect second target password")
+
+	// Verify jobs
+	assert.Len(t, config.Jobs, 2, "Expected 2 jobs")
+
+	// Setup job
+	assert.Equal(t, "setup", config.Jobs[0].Name, "Incorrect first job name")
+	assert.Len(t, config.Jobs[0].Steps, 2, "Expected setup job to have 2 steps")
+	assert.Equal(t, "mkdir -p /var/www", config.Jobs[0].Steps[0].Run, "Incorrect first step command")
+
+	// Deploy job
+	assert.Equal(t, "deploy", config.Jobs[1].Name, "Incorrect second job name")
+}
+
+func TestReplaceEnvVariablesInTOML(t *testing.T) {
+	// Set environment variables for testing
+	os.Setenv("TEST_HOST", "test.example.com")
+	os.Setenv("TEST_USER", "testuser")
+	os.Setenv("TEST_PORT", "1234")
+
+	// Create temporary TOML config file with environment variables
+	tmpDir, err := os.MkdirTemp("", "config-test-toml-env")
+	assert.NoError(t, err, "Failed to create temp dir")
+	defer os.RemoveAll(tmpDir)
+
+	configPath := filepath.Join(tmpDir, "config.toml")
+	configContent := `
+[[targets]]
+host = "${TEST_HOST}"
+user = "${TEST_USER}"
+port = ${TEST_PORT}
+password = "secret"
+
+[[jobs]]
+name = "test-job"
+steps = [
+  { run = "echo 'Hello World'" }
+]
+`
+
+	err = os.WriteFile(configPath, []byte(configContent), 0644)
+	assert.NoError(t, err, "Failed to write config file")
+
+	// Load the config
+	loader := NewLoader()
+	config, err := loader.Load(configPath)
+	assert.NoError(t, err, "Failed to load config")
+
+	// Verify environment variable substitution
+	assert.Equal(t, "test.example.com", config.Targets[0].Host, "Environment variable not substituted in host")
+	assert.Equal(t, "testuser", config.Targets[0].User, "Environment variable not substituted in user")
+	assert.Equal(t, 1234, config.Targets[0].Port, "Environment variable not substituted in port")
+}

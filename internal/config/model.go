@@ -9,6 +9,6 @@ import (
 // Config represents the main deployment configuration structure containing
 // targets and jobs definitions.
 type Config struct {
-	Targets []*target.Target `yaml:"targets" json:"targets" validate:"required,dive"`
-	Jobs    []*job.Job       `yaml:"jobs" json:"jobs" validate:"required,dive"`
+	Targets []*target.Target `yaml:"targets" json:"targets" toml:"targets" validate:"required,dive"`
+	Jobs    []*job.Job       `yaml:"jobs" json:"jobs" toml:"jobs" validate:"required,dive"`
 }

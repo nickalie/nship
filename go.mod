@@ -6,6 +6,7 @@ require (
 	github.com/evanw/esbuild v0.25.0
 	github.com/go-playground/validator/v10 v10.25.0
 	github.com/joho/godotenv v1.5.1
+	github.com/pelletier/go-toml/v2 v2.2.3
 	github.com/pkg/sftp v1.13.7
 	github.com/sosedoff/ansible-vault-go v0.2.0
 	github.com/stretchr/testify v1.10.0

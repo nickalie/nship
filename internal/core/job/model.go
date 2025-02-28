@@ -2,37 +2,37 @@ package job
 
 // Job represents a collection of steps to be executed on targets.
 type Job struct {
-	Name  string  `yaml:"name,omitempty" json:"name,omitempty" validate:"omitempty"`
-	Steps []*Step `yaml:"steps" json:"steps" validate:"required,dive"`
+	Name  string  `yaml:"name,omitempty" json:"name,omitempty" toml:"name,omitempty" validate:"omitempty"`
+	Steps []*Step `yaml:"steps" json:"steps" toml:"steps" validate:"required,dive"`
 }
 
 // Step defines a single deployment action that can be either
 // a command execution, file copy operation, or Docker operation.
 type Step struct {
-	Run    string      `yaml:"run,omitempty" json:"run,omitempty" validate:"required_without_all=Copy Shell Docker"`
-	Copy   *CopyStep   `yaml:"copy,omitempty" json:"copy,omitempty" validate:"required_without_all=Run Shell Docker"`
-	Shell  string      `yaml:"shell,omitempty" json:"shell,omitempty"`
-	Docker *DockerStep `yaml:"docker,omitempty" json:"docker,omitempty" validate:"required_without_all=Run Copy Shell"`
+	Run    string      `yaml:"run,omitempty" json:"run,omitempty" toml:"run,omitempty" validate:"required_without_all=Copy Shell Docker"`
+	Copy   *CopyStep   `yaml:"copy,omitempty" json:"copy,omitempty" toml:"copy,omitempty" validate:"required_without_all=Run Shell Docker"`
+	Shell  string      `yaml:"shell,omitempty" json:"shell,omitempty" toml:"shell,omitempty"`
+	Docker *DockerStep `yaml:"docker,omitempty" json:"docker,omitempty" toml:"docker,omitempty" validate:"required_without_all=Run Copy Shell"`
 }
 
 // DockerStep defines Docker container configuration and execution parameters.
 type DockerStep struct {
-	Image       string            `yaml:"image" json:"image" validate:"required"`
-	Name        string            `yaml:"name" json:"name" validate:"required"`
-	Environment map[string]string `yaml:"environment" json:"environment" validate:"omitempty"`
-	Ports       []string          `yaml:"ports" json:"ports" validate:"omitempty,dive,required"`
-	Volumes     []string          `yaml:"volumes" json:"volumes" validate:"omitempty,dive,required"`
-	Labels      map[string]string `yaml:"labels" json:"labels" validate:"omitempty"`
-	Networks    []string          `yaml:"networks" json:"networks" validate:"omitempty,dive,required"`
-	Commands    []string          `yaml:"commands" json:"commands" validate:"omitempty,dive,required"`
-	Restart     string            `yaml:"restart" json:"restart" validate:"omitempty,oneof=no on-failure always unless-stopped"`
+	Image       string            `yaml:"image" json:"image" toml:"image" validate:"required"`
+	Name        string            `yaml:"name" json:"name" toml:"name" validate:"required"`
+	Environment map[string]string `yaml:"environment" json:"environment" toml:"environment" validate:"omitempty"`
+	Ports       []string          `yaml:"ports" json:"ports" toml:"ports" validate:"omitempty,dive,required"`
+	Volumes     []string          `yaml:"volumes" json:"volumes" toml:"volumes" validate:"omitempty,dive,required"`
+	Labels      map[string]string `yaml:"labels" json:"labels" toml:"labels" validate:"omitempty"`
+	Networks    []string          `yaml:"networks" json:"networks" toml:"networks" validate:"omitempty,dive,required"`
+	Commands    []string          `yaml:"commands" json:"commands" toml:"commands" validate:"omitempty,dive,required"`
+	Restart     string            `yaml:"restart" json:"restart" toml:"restart" validate:"omitempty,oneof=no on-failure always unless-stopped"`
 }
 
 // CopyStep defines source and destination paths for file copy operations.
 type CopyStep struct {
-	Src     string   `yaml:"src" json:"src" validate:"required"`
-	Dst     string   `yaml:"dst" json:"dst" validate:"required"`
-	Exclude []string `yaml:"exclude,omitempty" json:"exclude,omitempty" validate:"omitempty,dive,required"`
+	Src     string   `yaml:"src" json:"src" toml:"src" validate:"required"`
+	Dst     string   `yaml:"dst" json:"dst" toml:"dst" validate:"required"`
+	Exclude []string `yaml:"exclude,omitempty" json:"exclude,omitempty" toml:"exclude,omitempty" validate:"omitempty,dive,required"`
 }
 
 // GetShell returns the shell to use for command execution, defaulting to sh if not specified.

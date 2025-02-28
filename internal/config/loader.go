@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/pelletier/go-toml/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -48,7 +49,8 @@ func NewLoader() Loader {
 	loader.loaders[".js"] = loader.loadJavaScriptConfig
 	loader.loaders[".mjs"] = loader.loadJavaScriptConfig
 	loader.loaders[".go"] = loader.loadGolangConfig
-	loader.loaders[".json"] = loader.loadJSONConfig // Add JSON loader
+	loader.loaders[".json"] = loader.loadJSONConfig
+	loader.loaders[".toml"] = loader.loadTOMLConfig
 
 	return loader
 }
@@ -192,6 +194,23 @@ func (l *DefaultLoader) loadJSONConfig(configPath string) (*Config, error) {
 	var config Config
 	if err := json.Unmarshal([]byte(dataStr), &config); err != nil {
 		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	return &config, nil
+}
+
+// loadTOMLConfig loads configuration from TOML file
+func (l *DefaultLoader) loadTOMLConfig(configPath string) (*Config, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	dataStr := replaceEnvVariables(string(data))
+
+	var config Config
+	if err := toml.Unmarshal([]byte(dataStr), &config); err != nil {
+		return nil, fmt.Errorf("failed to parse TOML: %w", err)
 	}
 
 	return &config, nil
