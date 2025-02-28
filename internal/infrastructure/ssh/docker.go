@@ -69,11 +69,7 @@ func (b *DockerCommandBuilder) buildDockerCreateCommand() string {
 
 	args = append(args, b.docker.Image)
 
-	// If there are commands, join them with spaces and quote the entire command string
-	if len(b.docker.Commands) > 0 {
-		command := strings.Join(b.docker.Commands, " ")
-		args = append(args, fmt.Sprintf("%q", command))
-	}
+	args = append(args, b.docker.Commands...)
 
 	return strings.Join(args, " ")
 }
