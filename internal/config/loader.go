@@ -48,6 +48,7 @@ func NewLoader() Loader {
 	loader.loaders[".js"] = loader.loadJavaScriptConfig
 	loader.loaders[".mjs"] = loader.loadJavaScriptConfig
 	loader.loaders[".go"] = loader.loadGolangConfig
+	loader.loaders[".json"] = loader.loadJSONConfig // Add JSON loader
 
 	return loader
 }
@@ -82,6 +83,7 @@ func execCommand(dir string, args ...string) ([]byte, error) {
 
 	// Read stdout in a goroutine and print to console while also collecting for return
 	go func() {
+		defer wg.Done()
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -89,17 +91,16 @@ func execCommand(dir string, args ...string) ([]byte, error) {
 			outputBuffer.WriteString(line + "\n")
 		}
 	}()
-	wg.Done()
 
 	// Read stderr in a goroutine
 	go func() {
+		defer wg.Done()
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
 			line := scanner.Text()
 			fmt.Fprintln(os.Stderr, line)
 			outputBuffer.WriteString(line + "\n")
 		}
-		wg.Done()
 	}()
 
 	// Wait for all goroutines to complete
@@ -177,6 +178,23 @@ func formatValidationErrors(errs validator.ValidationErrors) string {
 		))
 	}
 	return strings.Join(errMsgs, "\n")
+}
+
+// loadJSONConfig loads configuration from JSON file
+func (l *DefaultLoader) loadJSONConfig(configPath string) (*Config, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	dataStr := replaceEnvVariables(string(data))
+
+	var config Config
+	if err := json.Unmarshal([]byte(dataStr), &config); err != nil {
+		return nil, fmt.Errorf("failed to parse JSON: %w", err)
+	}
+
+	return &config, nil
 }
 
 // loadYAMLConfig loads configuration from YAML file
