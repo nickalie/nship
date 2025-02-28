@@ -239,18 +239,6 @@ nship --config=config.yaml --vault-password=yourpassword
 
 By default, nship skips execution of unchanged steps to optimize performance. Use `--no-skip` to disable this behavior.
 
-## API Usage
-
-nship provides an API for integration into other applications:
-
-```go
-cfg, err := nship.LoadConfig("config.yaml")
-if err != nil {
-    log.Fatal(err)
-}
-nship.RunConfig(cfg, "deploy-app")
-```
-
 ## Contributing
 
 Contributions are welcome! Feel free to submit issues and pull requests.
