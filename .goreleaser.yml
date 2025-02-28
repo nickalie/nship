@@ -32,8 +32,7 @@ builds:
     flags:
       - -trimpath
     # Set custom ldflags - useful for embedding version info
-    ldflags:
-      - -s -w -X main.version={{.Version}} -X main.commit={{.Commit}} -X main.date={{.Date}}
+    ldflags: "-s -w -X main.revision={{.Tag}}-{{.ShortCommit}}-{{.CommitDate}}"
 
 archives:
   - name_template: >-

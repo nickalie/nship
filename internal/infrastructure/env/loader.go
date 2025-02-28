@@ -46,7 +46,7 @@ func (l *DefaultLoader) Load(path, vaultPassword string) error {
 // loadVaultFile loads environment variables from an Ansible Vault encrypted file.
 func (l *DefaultLoader) loadVaultFile(path, password string) error {
 	// Handle password resolution
-	password, err := resolveVaultPassword(password)
+	password, err := resolveVaultPassword(password, path)
 	if err != nil {
 		return err
 	}
@@ -62,7 +62,7 @@ func (l *DefaultLoader) loadVaultFile(path, password string) error {
 }
 
 // resolveVaultPassword determines the password to use for decryption
-func resolveVaultPassword(password string) (string, error) {
+func resolveVaultPassword(password string, vaultPath string) (string, error) {
 	if password != "" {
 		return password, nil
 	}
@@ -73,7 +73,7 @@ func resolveVaultPassword(password string) (string, error) {
 	}
 
 	// Prompt user for password
-	promptedPwd, err := promptVaultPassword()
+	promptedPwd, err := promptVaultPassword(vaultPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to get vault password: %w", err)
 	}
@@ -96,21 +96,23 @@ func setEnvironmentVariables(decrypted string) error {
 	return nil
 }
 
-// promptVaultPassword prompts the user for a vault password.
-func promptVaultPassword() (string, error) {
-	fmt.Print("Enter vault password: ")
+// promptVaultPassword prompts the user for a vault password for the specified vault file.
+func promptVaultPassword(vaultPath string) (string, error) {
+	fmt.Printf("Enter vault password for %s: ", vaultPath)
 
-	if password, err := term.ReadPassword(int(syscall.Stdin)); err == nil {
+	password, err := term.ReadPassword(int(syscall.Stdin))
+	if err == nil {
 		fmt.Println() // Add newline after password input
 		return string(password), nil
 	}
 
-	// Fallback to standard input if term.ReadPassword fails
+	// Final fallback: Regular input (with warning)
+	fmt.Println("\nWarning: Unable to hide password input. Password will be visible.")
 	reader := bufio.NewReader(os.Stdin)
-	password, err := reader.ReadBytes('\n')
+	passwordBytes, err := reader.ReadBytes('\n')
 	if err != nil {
 		return "", fmt.Errorf("failed to read password: %w", err)
 	}
 
-	return strings.TrimSpace(string(password)), nil
+	return strings.TrimSpace(string(passwordBytes)), nil
 }

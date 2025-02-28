@@ -286,12 +286,12 @@ func TestResolveVaultPasswordPrecedence(t *testing.T) {
 	defer os.Unsetenv("VAULT_PASSWORD")
 
 	// Direct password should take precedence
-	password, err := resolveVaultPassword("direct-password")
+	password, err := resolveVaultPassword("direct-password", "test-vault.vault")
 	assert.NoError(t, err, "Unexpected error resolving password")
 	assert.Equal(t, "direct-password", password, "Direct password should be used")
 
 	// Environment variable should be used if no direct password
-	password, err = resolveVaultPassword("")
+	password, err = resolveVaultPassword("", "test-vault.vault")
 	assert.NoError(t, err, "Unexpected error resolving password")
 	assert.Equal(t, "env-password", password, "Environment variable password should be used")
 

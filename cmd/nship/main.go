@@ -10,6 +10,8 @@ import (
 	"github.com/nickalie/nship/internal/platform/cli"
 )
 
+var revision = "latest"
+
 // Application encapsulates the nship CLI application
 type Application struct {
 	configPath    string
@@ -26,7 +28,7 @@ type Application struct {
 func NewApplication() *Application {
 	return &Application{
 		configPath:    "nship.yaml",
-		versionString: "1.0.0",
+		versionString: revision,
 	}
 }
 
@@ -41,7 +43,6 @@ func (app *Application) ParseFlags() {
 	flag.StringVar(&envPathsStr, "env", "", "Comma-separated paths to environment files")
 	flag.StringVar(&app.vaultPassword, "vault-password", app.vaultPassword, "Password for Ansible Vault file")
 	flag.BoolVar(&app.noSkip, "no-skip", app.noSkip, "Disable skipping unchanged steps")
-	flag.BoolVar(&app.verbose, "verbose", app.verbose, "Enable verbose logging")
 	flag.BoolVar(&app.version, "version", app.version, "Show version information")
 
 	flag.Parse()
@@ -58,13 +59,6 @@ func (app *Application) Run() error {
 	if app.version {
 		fmt.Printf("nship version %s\n", app.versionString)
 		return nil
-	}
-
-	// Setup logging
-	if app.verbose {
-		log.SetFlags(log.LstdFlags | log.Lshortfile)
-	} else {
-		log.SetFlags(0)
 	}
 
 	// Create and run application
