@@ -164,6 +164,12 @@ ports = ["8080:80"]
 Executes a shell command:
 
 ```yaml
+- run: |
+    echo "Starting deployment..."
+    mkdir -p /var/www/app
+    cp -r ./app/* /var/www/app/
+    systemctl restart myapp
+
 - run: systemctl restart myapp
 ```
 
@@ -233,8 +239,11 @@ Runs a Docker container on the target. If the container already exists, it will 
 nship supports Ansible Vault for secure credentials management. To decrypt a vault file, use:
 
 ```sh
-nship --config=config.yaml --vault-password=yourpassword
+nship --env=env.vault --vault-password=yourpassword
 ```
+The VAULT_PASSWORD environment variable can also be used to provide the password for decrypting Ansible Vault files, allowing for more secure automation workflows.
+
+If both --vault-password and the VAULT_PASSWORD environment variable are missing, the tool will prompt for the password in the terminal.
 
 ## Skipping Unchanged Steps
 
