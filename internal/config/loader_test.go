@@ -21,16 +21,13 @@ import (
 func TestLoadYAMLConfig(t *testing.T) {
 	// Create temporary YAML config file
 	tmpDir, err := os.MkdirTemp("", "config-test")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	assert.NoError(t, err, "Failed to create temp dir")
 	defer os.RemoveAll(tmpDir)
 
 	// Create a temporary private key file
 	privateKeyPath := filepath.Join(tmpDir, "key.pem")
-	if err := os.WriteFile(privateKeyPath, []byte("dummy private key"), 0600); err != nil {
-		t.Fatalf("Failed to create private key file: %v", err)
-	}
+	err = os.WriteFile(privateKeyPath, []byte("dummy private key"), 0600)
+	assert.NoError(t, err, "Failed to create private key file")
 
 	configPath := filepath.Join(tmpDir, "config.yaml")
 	configContent := `
@@ -61,85 +58,48 @@ jobs:
             - 80:80
 `
 
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-		t.Fatalf("Failed to write config file: %v", err)
-	}
+	err = os.WriteFile(configPath, []byte(configContent), 0644)
+	assert.NoError(t, err, "Failed to write config file")
 
 	// Load the config
 	loader := NewLoader()
 	config, err := loader.Load(configPath)
-	if err != nil {
-		t.Fatalf("Failed to load config: %v", err)
-	}
+	assert.NoError(t, err, "Failed to load config")
 
 	// Verify targets
-	if len(config.Targets) != 2 {
-		t.Errorf("Expected 2 targets, got %d", len(config.Targets))
-	}
+	assert.Len(t, config.Targets, 2, "Expected 2 targets")
 
 	// First target
-	if config.Targets[0].Name != "web-server" {
-		t.Errorf("Expected first target name to be 'web-server', got %s", config.Targets[0].Name)
-	}
-	if config.Targets[0].Host != "web.example.com" {
-		t.Errorf("Expected first target host to be 'web.example.com', got %s", config.Targets[0].Host)
-	}
-	if config.Targets[0].Port != 2222 {
-		t.Errorf("Expected first target port to be 2222, got %d", config.Targets[0].Port)
-	}
-	if config.Targets[0].PrivateKey != privateKeyPath {
-		t.Errorf("Expected first target private key to be '%s', got %s", privateKeyPath, config.Targets[0].PrivateKey)
-	}
+	assert.Equal(t, "web-server", config.Targets[0].Name, "Incorrect first target name")
+	assert.Equal(t, "web.example.com", config.Targets[0].Host, "Incorrect first target host")
+	assert.Equal(t, 2222, config.Targets[0].Port, "Incorrect first target port")
+	assert.Equal(t, privateKeyPath, config.Targets[0].PrivateKey, "Incorrect first target private key")
 
 	// Second target
-	if config.Targets[1].Host != "db.example.com" {
-		t.Errorf("Expected second target host to be 'db.example.com', got %s", config.Targets[1].Host)
-	}
-	if config.Targets[1].Password != "password123" {
-		t.Errorf("Expected second target password to be 'password123', got %s", config.Targets[1].Password)
-	}
+	assert.Equal(t, "db.example.com", config.Targets[1].Host, "Incorrect second target host")
+	assert.Equal(t, "password123", config.Targets[1].Password, "Incorrect second target password")
 
 	// Verify jobs
-	if len(config.Jobs) != 2 {
-		t.Errorf("Expected 2 jobs, got %d", len(config.Jobs))
-	}
+	assert.Len(t, config.Jobs, 2, "Expected 2 jobs")
 
 	// Setup job
-	if config.Jobs[0].Name != "setup" {
-		t.Errorf("Expected first job name to be 'setup', got %s", config.Jobs[0].Name)
-	}
-	if len(config.Jobs[0].Steps) != 2 {
-		t.Errorf("Expected setup job to have 2 steps, got %d", len(config.Jobs[0].Steps))
-	}
-	if config.Jobs[0].Steps[0].Run != "mkdir -p /var/www" {
-		t.Errorf("Expected first step command to be 'mkdir -p /var/www', got %s", config.Jobs[0].Steps[0].Run)
-	}
+	assert.Equal(t, "setup", config.Jobs[0].Name, "Incorrect first job name")
+	assert.Len(t, config.Jobs[0].Steps, 2, "Expected setup job to have 2 steps")
+	assert.Equal(t, "mkdir -p /var/www", config.Jobs[0].Steps[0].Run, "Incorrect first step command")
 
 	// Deploy job
-	if config.Jobs[1].Name != "deploy" {
-		t.Errorf("Expected second job name to be 'deploy', got %s", config.Jobs[1].Name)
-	}
-	if len(config.Jobs[1].Steps) != 2 {
-		t.Errorf("Expected deploy job to have 2 steps, got %d", len(config.Jobs[1].Steps))
-	}
+	assert.Equal(t, "deploy", config.Jobs[1].Name, "Incorrect second job name")
+	assert.Len(t, config.Jobs[1].Steps, 2, "Expected deploy job to have 2 steps")
 
 	// Copy step
 	copyStep := config.Jobs[1].Steps[0].Copy
-	if copyStep == nil {
-		t.Fatalf("Expected first step to be a copy step, but Copy is nil")
-	}
-	if copyStep.Src != "./config/nginx.conf" {
-		t.Errorf("Expected copy step source to be './config/nginx.conf', got %s", copyStep.Src)
-	}
+	assert.NotNil(t, copyStep, "Expected first step to be a copy step, but Copy is nil")
+	assert.Equal(t, "./config/nginx.conf", copyStep.Src, "Incorrect copy step source")
 
 	// Docker step
 	dockerStep := config.Jobs[1].Steps[1].Docker
-	if dockerStep == nil {
-		t.Fatalf("Expected second step to be a docker step, but Docker is nil")
-	}
-	if dockerStep.Image != "nginx:latest" {
-		t.Errorf("Expected docker image to be 'nginx:latest', got %s", dockerStep.Image)
-	}
+	assert.NotNil(t, dockerStep, "Expected second step to be a docker step, but Docker is nil")
+	assert.Equal(t, "nginx:latest", dockerStep.Image, "Incorrect docker image")
 }
 
 func TestReplaceEnvVariables(t *testing.T) {
@@ -161,36 +121,20 @@ targets:
 	result := replaceEnvVariables(content)
 
 	// Verify substitutions
-	if !strings.Contains(result, "test.example.com") {
-		t.Errorf("Expected content to contain 'test.example.com', but it doesn't")
-	}
-	if !strings.Contains(result, "testuser") {
-		t.Errorf("Expected content to contain 'testuser', but it doesn't")
-	}
-	if !strings.Contains(result, "1234") {
-		t.Errorf("Expected content to contain '1234', but it doesn't")
-	}
-	if strings.Contains(result, "${TEST_HOST}") {
-		t.Errorf("Environment variable ${TEST_HOST} was not replaced")
-	}
-	if strings.Contains(result, "${TEST_USER}") {
-		t.Errorf("Environment variable ${TEST_USER} was not replaced")
-	}
-	if strings.Contains(result, "${TEST_PORT}") {
-		t.Errorf("Environment variable ${TEST_PORT} was not replaced")
-	}
+	assert.Contains(t, result, "test.example.com", "Expected content to contain substituted host")
+	assert.Contains(t, result, "testuser", "Expected content to contain substituted user")
+	assert.Contains(t, result, "1234", "Expected content to contain substituted port")
+	assert.NotContains(t, result, "${TEST_HOST}", "Environment variable ${TEST_HOST} was not replaced")
+	assert.NotContains(t, result, "${TEST_USER}", "Environment variable ${TEST_USER} was not replaced")
+	assert.NotContains(t, result, "${TEST_PORT}", "Environment variable ${TEST_PORT} was not replaced")
 
 	// Test with non-existent environment variable
 	content = "host: ${NONEXISTENT_VAR}"
 	result = replaceEnvVariables(content)
 
 	// Non-existent variables should be replaced with empty string
-	if strings.Contains(result, "${NONEXISTENT_VAR}") {
-		t.Errorf("Non-existent environment variable was not replaced")
-	}
-	if !strings.Contains(result, "host: ") {
-		t.Errorf("Expected 'host: ' after replacement, got %s", result)
-	}
+	assert.NotContains(t, result, "${NONEXISTENT_VAR}", "Non-existent environment variable was not replaced")
+	assert.Contains(t, result, "host: ", "Expected 'host: ' after replacement")
 }
 
 // setupTestLoader creates a test loader with a mock command runner
@@ -287,22 +231,13 @@ func TestLoadJavaScriptConfig(t *testing.T) {
 			config, err := loader.loadJavaScriptConfig(jsPath)
 
 			if tt.expectError {
-				if err == nil {
-					t.Errorf("Expected error but got nil")
-				}
+				assert.Error(t, err, "Expected error but got nil")
 			} else {
-				if err != nil {
-					t.Errorf("Expected no error but got: %v", err)
-				}
+				assert.NoError(t, err, "Expected no error")
 
 				// Verify config was loaded correctly
-				if config.Targets[0].Host != validConfig.Targets[0].Host {
-					t.Errorf("Expected host %s, got %s", validConfig.Targets[0].Host, config.Targets[0].Host)
-				}
-
-				if config.Jobs[0].Name != validConfig.Jobs[0].Name {
-					t.Errorf("Expected job name %s, got %s", validConfig.Jobs[0].Name, config.Jobs[0].Name)
-				}
+				assert.Equal(t, validConfig.Targets[0].Host, config.Targets[0].Host, "Incorrect host")
+				assert.Equal(t, validConfig.Jobs[0].Name, config.Jobs[0].Name, "Incorrect job name")
 			}
 		})
 	}
@@ -358,9 +293,7 @@ func TestLoadTypeScriptConfig(t *testing.T) {
 
 			// Write dummy content to the file
 			err := os.WriteFile(tsPath, []byte("export default {}"), 0644)
-			if err != nil {
-				t.Fatalf("Failed to write test TS file: %v", err)
-			}
+			assert.NoError(t, err, "Failed to write test TS file")
 
 			loader := setupTestLoader(tt.cmdOutput, tt.cmdErr)
 
@@ -386,18 +319,12 @@ func TestLoadTypeScriptConfig(t *testing.T) {
 			loader.loaders[".js"] = oldJSLoader
 
 			if tt.expectError {
-				if err == nil {
-					t.Errorf("Expected error but got nil")
-				}
+				assert.Error(t, err, "Expected error but got nil")
 			} else {
-				if err != nil {
-					t.Errorf("Expected no error but got: %v", err)
-				}
+				assert.NoError(t, err, "Expected no error")
 
 				// Check config values
-				if config.Targets[0].Host != validConfig.Targets[0].Host {
-					t.Errorf("Expected host %s, got %s", validConfig.Targets[0].Host, config.Targets[0].Host)
-				}
+				assert.Equal(t, validConfig.Targets[0].Host, config.Targets[0].Host, "Incorrect host")
 			}
 		})
 	}
@@ -436,25 +363,15 @@ func TestLoadGolangConfig(t *testing.T) {
 	config, err := loader.loadGolangConfig(goPath)
 
 	// Verify results
-	if err != nil {
-		t.Errorf("Expected no error but got: %v", err)
-	}
-
-	if config.Targets[0].Host != validConfig.Targets[0].Host {
-		t.Errorf("Expected host %s, got %s", validConfig.Targets[0].Host, config.Targets[0].Host)
-	}
-
-	if config.Jobs[0].Name != validConfig.Jobs[0].Name {
-		t.Errorf("Expected job name %s, got %s", validConfig.Jobs[0].Name, config.Jobs[0].Name)
-	}
+	assert.NoError(t, err, "Expected no error")
+	assert.Equal(t, validConfig.Targets[0].Host, config.Targets[0].Host, "Incorrect host")
+	assert.Equal(t, validConfig.Jobs[0].Name, config.Jobs[0].Name, "Incorrect job name")
 }
 
 func TestInvalidConfig(t *testing.T) {
 	// Create temporary YAML config file with invalid configuration
 	tmpDir, err := os.MkdirTemp("", "config-test-invalid")
-	if err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
+	assert.NoError(t, err, "Failed to create temp dir")
 	defer os.RemoveAll(tmpDir)
 
 	configPath := filepath.Join(tmpDir, "invalid-config.yaml")
@@ -465,25 +382,19 @@ jobs:
   - name: empty-job
 `
 
-	if err := os.WriteFile(configPath, []byte(invalidConfig), 0644); err != nil {
-		t.Fatalf("Failed to write config file: %v", err)
-	}
+	err = os.WriteFile(configPath, []byte(invalidConfig), 0644)
+	assert.NoError(t, err, "Failed to write config file")
 
 	// Load the config
 	loader := NewLoader()
 	_, err = loader.Load(configPath)
 
 	// Expect validation error
-	if err == nil {
-		t.Fatalf("Expected validation error but got nil")
-	}
-
-	// Check that error message contains validation failure
-	if !strings.Contains(err.Error(), "validation failed") {
-		t.Errorf("Expected error to contain 'validation failed', got: %v", err)
-	}
+	assert.Error(t, err, "Expected validation error but got nil")
+	assert.Contains(t, err.Error(), "validation failed", "Error message should mention validation failure")
 }
 
+// TestAutoNaming test needs to be updated
 func TestAutoNaming(t *testing.T) {
 	// Test that jobs and targets get default names if not specified
 	config := &Config{
@@ -502,32 +413,23 @@ func TestAutoNaming(t *testing.T) {
 
 	// Validate should set default names
 	err := loader.validateConfig(config)
-	if err != nil {
-		t.Fatalf("Validation failed: %v", err)
-	}
+	assert.NoError(t, err, "Validation failed")
 
 	// Check target naming
-	if config.Targets[0].Name != "unnamed.example.com" {
-		t.Errorf("Expected target name to default to host, got: %s", config.Targets[0].Name)
-	}
+	assert.Equal(t, "unnamed.example.com", config.Targets[0].Name, "Target name should default to host")
 
 	// Check job naming
-	if config.Jobs[0].Name != "job-1" {
-		t.Errorf("Expected job name to be 'job-1', got: %s", config.Jobs[0].Name)
-	}
+	assert.Equal(t, "job-1", config.Jobs[0].Name, "Job name should be 'job-1'")
 }
 
+// TestUnsupportedExtension needs to be updated
 func TestUnsupportedExtension(t *testing.T) {
 	loader := NewLoader()
 	_, err := loader.Load("config.unsupported")
 
-	if err == nil {
-		t.Fatalf("Expected error for unsupported extension, got nil")
-	}
-
-	if !strings.Contains(err.Error(), "unsupported config file extension") {
-		t.Errorf("Expected error to mention unsupported extension, got: %v", err)
-	}
+	assert.Error(t, err, "Expected error for unsupported extension")
+	assert.Contains(t, err.Error(), "unsupported config file extension",
+		"Error should mention unsupported extension")
 }
 
 // TestExecCommand tests the execCommand function with various scenarios
@@ -576,17 +478,9 @@ func TestExecCommand(t *testing.T) {
 		os.Stdout = originalStdout
 
 		// Verify
-		if err != nil {
-			t.Errorf("Expected no error, got: %v", err)
-		}
-
-		if !strings.Contains(string(output), expected) {
-			t.Errorf("Expected output to contain '%s', got: '%s'", expected, string(output))
-		}
-
-		if !strings.Contains(stdout, expected) {
-			t.Errorf("Expected stdout to contain '%s', got: '%s'", expected, stdout)
-		}
+		assert.NoError(t, err, "Command should execute without errors")
+		assert.Contains(t, string(output), expected, "Output should contain expected text")
+		assert.Contains(t, stdout, expected, "Stdout should contain expected text")
 	})
 
 	t.Run("CommandWithError", func(t *testing.T) {
@@ -610,9 +504,7 @@ func TestExecCommand(t *testing.T) {
 		_ = stderr // This line prevents the "declared and not used" error for stderr
 
 		// Verify
-		if err == nil {
-			t.Errorf("Expected an error, got nil")
-		}
+		assert.Error(t, err, "Command should produce an error")
 
 		// No assertion on stderr content as it may vary by OS
 	})
@@ -682,20 +574,15 @@ func TestExecCommand(t *testing.T) {
 		}
 
 		// Check combined output has both stdout and stderr
-		if !strings.Contains(string(output), "Standard output") {
-			t.Errorf("Expected output to contain 'Standard output', got: '%s'", string(output))
-		}
-		if !strings.Contains(string(output), "Standard error") {
-			t.Errorf("Expected output to contain 'Standard error', got: '%s'", string(output))
-		}
+		assert.NoError(t, err, "Command should execute without errors")
+
+		// Check combined output has both stdout and stderr
+		assert.Contains(t, string(output), "Standard output", "Output should contain stdout message")
+		assert.Contains(t, string(output), "Standard error", "Output should contain stderr message")
 
 		// Check that stdout and stderr were captured correctly
-		if !strings.Contains(stdout, "Standard output") {
-			t.Errorf("Expected stdout to contain 'Standard output', got: '%s'", stdout)
-		}
-		if !strings.Contains(stderr, "Standard error") {
-			t.Errorf("Expected stderr to contain 'Standard error', got: '%s'", stderr)
-		}
+		assert.Contains(t, stdout, "Standard output", "Stdout should contain expected text")
+		assert.Contains(t, stderr, "Standard error", "Stderr should contain expected text")
 	})
 
 	t.Run("LongRunningCommand", func(t *testing.T) {
@@ -749,25 +636,18 @@ func TestExecCommand(t *testing.T) {
 		os.Stdout = originalStdout
 
 		// Verify
-		if err != nil {
-			t.Errorf("Expected no error, got: %v", err)
-		}
+		assert.NoError(t, err, "Command should execute without errors")
 
 		// Check that all output is present
 		expectedLines := []string{"Starting", "Step 1", "Step 2", "Finished"}
 		for _, line := range expectedLines {
-			if !strings.Contains(string(output), line) {
-				t.Errorf("Expected output to contain '%s', got: '%s'", line, string(output))
-			}
-			if !strings.Contains(stdout, line) {
-				t.Errorf("Expected stdout to contain '%s', got: '%s'", line, stdout)
-			}
+			assert.Contains(t, string(output), line, "Output should contain expected line")
+			assert.Contains(t, stdout, line, "Stdout should contain expected line")
 		}
 
 		// Verify that the execution time is reasonable
-		if execTime < 50*time.Millisecond {
-			t.Errorf("Execution time too short (%v), suggests output was not streamed in real-time", execTime)
-		}
+		assert.GreaterOrEqual(t, execTime, 50*time.Millisecond,
+			"Execution time should be reasonable to ensure streaming output")
 	})
 
 	t.Run("WorkingDirectory", func(t *testing.T) {
@@ -799,9 +679,8 @@ func TestExecCommand(t *testing.T) {
 		}
 
 		// Check that the output contains the temp directory path
-		if !strings.Contains(normalizedOutput, normalizedTempDir) {
-			t.Errorf("Expected output to contain temp directory '%s', got: '%s'", normalizedTempDir, normalizedOutput)
-		}
+		assert.Contains(t, normalizedOutput, normalizedTempDir,
+			"Output should contain the working directory path")
 	})
 }
 
