@@ -75,7 +75,6 @@ func RunConfigWithOptions(cfg *Config, jobName string, skipUnchanged bool, hashS
 // RunConfig executes the deployment (runs all steps regardless of change status)
 func RunConfig(cfg *Config, jobName string) error {
 	var jobs []*job.Job
-	var err error
 
 	// Filter jobs by name if specified
 	if jobName != "" {

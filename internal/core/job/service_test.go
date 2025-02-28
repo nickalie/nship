@@ -3,38 +3,12 @@ package job
 import (
 	"errors"
 	"fmt"
+	"github.com/stretchr/testify/mock"
+	"os"
 	"testing"
 
 	"github.com/nickalie/nship/internal/core/target"
 )
-
-// MockHashStorage implements HashStorage for testing
-type MockHashStorage struct {
-	SaveHashFunc func(targetName, jobName string, stepIndex int, hash string) error
-	GetHashFunc  func(targetName, jobName string, stepIndex int) (string, error)
-	ClearFunc    func() error
-}
-
-func (m *MockHashStorage) SaveHash(targetName, jobName string, stepIndex int, hash string) error {
-	if m.SaveHashFunc != nil {
-		return m.SaveHashFunc(targetName, jobName, stepIndex, hash)
-	}
-	return nil
-}
-
-func (m *MockHashStorage) GetHash(targetName, jobName string, stepIndex int) (string, error) {
-	if m.GetHashFunc != nil {
-		return m.GetHashFunc(targetName, jobName, stepIndex)
-	}
-	return "", nil
-}
-
-func (m *MockHashStorage) Clear() error {
-	if m.ClearFunc != nil {
-		return m.ClearFunc()
-	}
-	return nil
-}
 
 func TestNewServiceWithOptions(t *testing.T) {
 	mockClientFactory := &MockClientFactory{}
@@ -58,9 +32,14 @@ func TestNewServiceWithOptions(t *testing.T) {
 func TestShouldExecuteStep(t *testing.T) {
 	// Create step for testing
 	step := &Step{Run: "echo test"}
-
-	// Default hash for this step
 	defaultHash := "hashed_step_value"
+
+	// Create mock filesystem
+	mockFS := &MockFileSystemForHashing{
+		StatFunc: func(name string) (os.FileInfo, error) {
+			return &MockFileInfoForHashing{}, nil
+		},
+	}
 
 	tests := []struct {
 		name           string
@@ -138,28 +117,17 @@ func TestShouldExecuteStep(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Mock step hasher that returns a fixed hash
-			stepHasher := &StepHasher{}
-
 			// Create service with test configuration
 			service := &Service{
-				stepHasher:    stepHasher,
+				stepHasher:    NewStepHasher(),
 				skipUnchanged: tt.skipUnchanged,
 				hashStorage:   tt.hashStorage,
+				fileSystem:    mockFS,
 			}
 
 			// Create target and job for testing
 			tgt := &target.Target{Name: "test-target"}
 			job := &Job{Name: "test-job"}
-
-			// Override ComputeHash for this test
-			originalComputeHash := service.stepHasher.ComputeHash
-			service.stepHasher.ComputeHash = func(s *Step) (string, error) {
-				if s == step {
-					return defaultHash, nil
-				}
-				return originalComputeHash(s)
-			}
 
 			// Call the function
 			result, err := service.shouldExecuteStep(tgt, job, 0, step, tt.forceExecute)
@@ -195,23 +163,25 @@ func TestStepSkipping(t *testing.T) {
 		},
 	}
 
-	// Step execution tracking
-	executedSteps := make(map[int]bool)
-
-	// Create a client that tracks which steps were executed
-	mockClient := &MockClient{
-		ExecuteStepFunc: func(step *Step, stepNum, totalSteps int) error {
-			executedSteps[stepNum-1] = true
-			return nil
+	// Create a mock filesystem for hashing
+	mockFS := &MockFileSystemForHashing{
+		StatFunc: func(name string) (os.FileInfo, error) {
+			return &MockFileInfoForHashing{}, nil
 		},
 	}
+
+	executedSteps := make(map[int]bool)
+	mockClient := &MockClient{}
+	mockClient.On("ExecuteStep", mock.Anything, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			stepNum := args.Get(1).(int)
+			executedSteps[stepNum-1] = true
+		}).
+		Return(nil)
 
 	// Create a client factory that returns our mock client
-	mockClientFactory := &MockClientFactory{
-		NewClientFunc: func(target *target.Target) (Client, error) {
-			return mockClient, nil
-		},
-	}
+	mockClientFactory := &MockClientFactory{}
+	mockClientFactory.On("NewClient", mock.Anything).Return(mockClient, nil)
 
 	// Create a mock hash storage that returns specific hashes
 	hashStore := make(map[string]string)
@@ -248,7 +218,7 @@ func TestStepSkipping(t *testing.T) {
 				// Set up stored hashes for all steps
 				hashStore = make(map[string]string)
 				for i, step := range job.Steps {
-					hash, _ := (&StepHasher{}).ComputeHash(step)
+					hash, _ := (&StepHasher{}).ComputeHash(step, mockFS)
 					key := fmt.Sprintf("%s:%s:%d", tgt.GetName(), job.Name, i)
 					hashStore[key] = hash
 				}
@@ -262,7 +232,7 @@ func TestStepSkipping(t *testing.T) {
 				// Set up stored hashes for all steps
 				hashStore = make(map[string]string)
 				for i, step := range job.Steps {
-					hash, _ := (&StepHasher{}).ComputeHash(step)
+					hash, _ := (&StepHasher{}).ComputeHash(step, mockFS)
 					key := fmt.Sprintf("%s:%s:%d", tgt.GetName(), job.Name, i)
 					hashStore[key] = hash
 				}
@@ -277,7 +247,7 @@ func TestStepSkipping(t *testing.T) {
 				hashStore = make(map[string]string)
 
 				// Step 0 has matching hash
-				hash, _ := (&StepHasher{}).ComputeHash(job.Steps[0])
+				hash, _ := (&StepHasher{}).ComputeHash(job.Steps[0], mockFS)
 				key := fmt.Sprintf("%s:%s:%d", tgt.GetName(), job.Name, 0)
 				hashStore[key] = hash
 
@@ -286,7 +256,7 @@ func TestStepSkipping(t *testing.T) {
 				hashStore[key] = "different_hash"
 
 				// Step 2 has matching hash, but we expect it to run due to step 1 change
-				hash, _ = (&StepHasher{}).ComputeHash(job.Steps[2])
+				hash, _ = (&StepHasher{}).ComputeHash(job.Steps[2], mockFS)
 				key = fmt.Sprintf("%s:%s:%d", tgt.GetName(), job.Name, 2)
 				hashStore[key] = hash
 			},

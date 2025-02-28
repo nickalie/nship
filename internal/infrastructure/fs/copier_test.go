@@ -8,176 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 )
-
-// MockFileSystem implements FileSystem for testing
-type MockFileSystem struct {
-	StatFunc    func(name string) (os.FileInfo, error)
-	OpenFunc    func(name string) (io.ReadCloser, error)
-	ReadDirFunc func(name string) ([]os.DirEntry, error)
-}
-
-func (m *MockFileSystem) Stat(name string) (os.FileInfo, error) {
-	if m.StatFunc != nil {
-		return m.StatFunc(name)
-	}
-	return nil, errors.New("Stat not implemented")
-}
-
-func (m *MockFileSystem) Open(name string) (io.ReadCloser, error) {
-	if m.OpenFunc != nil {
-		return m.OpenFunc(name)
-	}
-	return nil, errors.New("Open not implemented")
-}
-
-func (m *MockFileSystem) ReadDir(name string) ([]os.DirEntry, error) {
-	if m.ReadDirFunc != nil {
-		return m.ReadDirFunc(name)
-	}
-	return nil, errors.New("ReadDir not implemented")
-}
-
-func (m *MockFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
-	return errors.New("WriteFile not implemented")
-}
-
-func (m *MockFileSystem) MkdirAll(path string, perm os.FileMode) error {
-	return errors.New("MkdirAll not implemented")
-}
-
-func (m *MockFileSystem) RemoveAll(path string) error {
-	return errors.New("RemoveAll not implemented")
-}
-
-// MockFileInfo implements os.FileInfo for testing
-type MockFileInfo struct {
-	NameFunc    func() string
-	SizeFunc    func() int64
-	ModeFunc    func() os.FileMode
-	ModTimeFunc func() time.Time
-	IsDirFunc   func() bool
-	SysFunc     func() interface{}
-}
-
-func (m *MockFileInfo) Name() string {
-	if m.NameFunc != nil {
-		return m.NameFunc()
-	}
-	return "mock-file"
-}
-
-func (m *MockFileInfo) Size() int64 {
-	if m.SizeFunc != nil {
-		return m.SizeFunc()
-	}
-	return 100
-}
-
-func (m *MockFileInfo) Mode() os.FileMode {
-	if m.ModeFunc != nil {
-		return m.ModeFunc()
-	}
-	return 0644
-}
-
-func (m *MockFileInfo) ModTime() time.Time {
-	if m.ModTimeFunc != nil {
-		return m.ModTimeFunc()
-	}
-	return time.Now()
-}
-
-func (m *MockFileInfo) IsDir() bool {
-	if m.IsDirFunc != nil {
-		return m.IsDirFunc()
-	}
-	return false
-}
-
-func (m *MockFileInfo) Sys() interface{} {
-	if m.SysFunc != nil {
-		return m.SysFunc()
-	}
-	return nil
-}
-
-// MockDirEntry implements os.DirEntry for testing
-type MockDirEntry struct {
-	NameFunc  func() string
-	IsDirFunc func() bool
-	TypeFunc  func() os.FileMode
-	InfoFunc  func() (os.FileInfo, error)
-}
-
-func (m *MockDirEntry) Name() string {
-	if m.NameFunc != nil {
-		return m.NameFunc()
-	}
-	return "mock-entry"
-}
-
-func (m *MockDirEntry) IsDir() bool {
-	if m.IsDirFunc != nil {
-		return m.IsDirFunc()
-	}
-	return false
-}
-
-func (m *MockDirEntry) Type() os.FileMode {
-	if m.TypeFunc != nil {
-		return m.TypeFunc()
-	}
-	return 0
-}
-
-func (m *MockDirEntry) Info() (os.FileInfo, error) {
-	if m.InfoFunc != nil {
-		return m.InfoFunc()
-	}
-	return &MockFileInfo{}, nil
-}
-
-// MockReadCloser implements io.ReadCloser for testing
-type MockReadCloser struct {
-	ReadFunc  func(p []byte) (n int, err error)
-	CloseFunc func() error
-}
-
-func (m *MockReadCloser) Read(p []byte) (n int, err error) {
-	if m.ReadFunc != nil {
-		return m.ReadFunc(p)
-	}
-	return 0, io.EOF
-}
-
-func (m *MockReadCloser) Close() error {
-	if m.CloseFunc != nil {
-		return m.CloseFunc()
-	}
-	return nil
-}
-
-// MockWriteCloser implements io.WriteCloser for testing
-type MockWriteCloser struct {
-	WriteFunc func(p []byte) (n int, err error)
-	CloseFunc func() error
-}
-
-func (m *MockWriteCloser) Write(p []byte) (n int, err error) {
-	if m.WriteFunc != nil {
-		return m.WriteFunc(p)
-	}
-	return len(p), nil
-}
-
-func (m *MockWriteCloser) Close() error {
-	if m.CloseFunc != nil {
-		return m.CloseFunc()
-	}
-	return nil
-}
 
 // MockSFTPClient implements SFTPClient for testing
 type MockSFTPClient struct {
@@ -187,6 +18,7 @@ type MockSFTPClient struct {
 	StatFunc     func(path string) (os.FileInfo, error)
 }
 
+// Create implements SFTPClient.Create
 func (m *MockSFTPClient) Create(path string) (io.WriteCloser, error) {
 	if m.CreateFunc != nil {
 		return m.CreateFunc(path)
@@ -194,6 +26,7 @@ func (m *MockSFTPClient) Create(path string) (io.WriteCloser, error) {
 	return &MockWriteCloser{}, nil
 }
 
+// MkdirAll implements SFTPClient.MkdirAll
 func (m *MockSFTPClient) MkdirAll(path string) error {
 	if m.MkdirAllFunc != nil {
 		return m.MkdirAllFunc(path)
@@ -201,6 +34,7 @@ func (m *MockSFTPClient) MkdirAll(path string) error {
 	return nil
 }
 
+// Chmod implements SFTPClient.Chmod
 func (m *MockSFTPClient) Chmod(path string, mode os.FileMode) error {
 	if m.ChmodFunc != nil {
 		return m.ChmodFunc(path, mode)
@@ -208,6 +42,7 @@ func (m *MockSFTPClient) Chmod(path string, mode os.FileMode) error {
 	return nil
 }
 
+// Stat implements SFTPClient.Stat
 func (m *MockSFTPClient) Stat(path string) (os.FileInfo, error) {
 	if m.StatFunc != nil {
 		return m.StatFunc(path)
@@ -215,31 +50,51 @@ func (m *MockSFTPClient) Stat(path string) (os.FileInfo, error) {
 	return &MockFileInfo{}, nil
 }
 
-func TestCopyFile(t *testing.T) {
-	mockContent := []byte("test file content")
-	fileCreated := false
-	fileWritten := false
-
-	mockFS := &MockFileSystem{
+// Update MockFileSystem for testing with needed methods
+func setupMockFileSystem(content []byte, isDir bool) *MockFileSystem {
+	return &MockFileSystem{
 		StatFunc: func(name string) (os.FileInfo, error) {
 			return &MockFileInfo{
 				SizeFunc: func() int64 {
-					return int64(len(mockContent))
+					return int64(len(content))
 				},
 				IsDirFunc: func() bool {
-					return false
+					return isDir
 				},
 			}, nil
 		},
 		OpenFunc: func(name string) (io.ReadCloser, error) {
 			return &MockReadCloser{
 				ReadFunc: func(p []byte) (n int, err error) {
-					copy(p, mockContent)
-					return len(mockContent), io.EOF
+					copy(p, content)
+					return len(content), io.EOF
 				},
 			}, nil
 		},
+		ReadDirFunc: func(name string) ([]os.DirEntry, error) {
+			// Return directory entries based on the testing needs
+			if isDir {
+				return []os.DirEntry{
+					&MockDirEntry{
+						NameFunc:  func() string { return "file1.txt" },
+						IsDirFunc: func() bool { return false },
+					},
+				}, nil
+			}
+			return nil, errors.New("not a directory")
+		},
+		ReadFileFunc: func(name string) ([]byte, error) {
+			return content, nil
+		},
 	}
+}
+
+func TestCopyFile(t *testing.T) {
+	mockContent := []byte("test file content")
+	fileCreated := false
+	fileWritten := false
+
+	mockFS := setupMockFileSystem(mockContent, false)
 
 	mockSFTP := &MockSFTPClient{
 		CreateFunc: func(path string) (io.WriteCloser, error) {
@@ -321,6 +176,9 @@ func TestCopyDir(t *testing.T) {
 		},
 		OpenFunc: func(name string) (io.ReadCloser, error) {
 			return &MockReadCloser{}, nil
+		},
+		ReadFileFunc: func(name string) ([]byte, error) {
+			return []byte("test content"), nil
 		},
 	}
 
@@ -412,4 +270,16 @@ func TestIsExcluded(t *testing.T) {
 			}
 		})
 	}
+}
+
+// setupTestEnvironment creates a temporary directory for testing
+func setupTestEnvironment(t *testing.T) (string, func()) {
+	tempDir, err := os.MkdirTemp("", "fs-test")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	cleanup := func() {
+		os.RemoveAll(tempDir)
+	}
+	return tempDir, cleanup
 }
