@@ -56,5 +56,5 @@ issues:
   exclude-use-default: false
 
 run:
-  deadline: 5m
+  timeout: 5m
   tests: true
