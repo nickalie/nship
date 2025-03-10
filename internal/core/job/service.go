@@ -97,7 +97,7 @@ func (s *Service) ExecuteJob(tgt *target.Target, job *Job) error {
 
 		// Store the hash for this step after successful execution
 		if s.hashStorage != nil {
-			hash, err := s.stepHasher.ComputeHash(step, s.fileSystem)
+			hash, err := s.stepHasher.ComputeHash(step, tgt, s.fileSystem)
 			if err != nil {
 				// Log the error but continue
 				fmt.Printf("Warning: failed to compute step hash: %v\n", err)
@@ -122,7 +122,7 @@ func (s *Service) shouldExecuteStep(tgt *target.Target, job *Job, stepIndex int,
 	}
 
 	// Compute the current hash
-	currentHash, err := s.stepHasher.ComputeHash(step, s.fileSystem)
+	currentHash, err := s.stepHasher.ComputeHash(step, tgt, s.fileSystem)
 	if err != nil {
 		return true, fmt.Errorf("failed to compute step hash: %w", err)
 	}

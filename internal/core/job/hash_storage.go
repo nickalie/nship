@@ -10,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+
+	"github.com/nickalie/nship/internal/core/target"
 )
 
 // HashStorage defines an interface for storing and retrieving step hashes
@@ -26,7 +28,7 @@ type HashStorage interface {
 
 // StepHasherInterface defines the interface for hash computation
 type StepHasherInterface interface {
-	ComputeHash(step *Step, fs FileSystemInterface) (string, error)
+	ComputeHash(step *Step, tgt *target.Target, fs FileSystemInterface) (string, error)
 }
 
 // StepHasher handles computing hashes for steps
@@ -45,16 +47,27 @@ type FileSystemInterface interface {
 
 // ComputeHash generates a hash for a step based on its configuration
 // For CopyStep, it also considers the source files
-func (h *StepHasher) ComputeHash(step *Step, fs FileSystemInterface) (string, error) {
-	// Special handling for CopyStep
-	if step.GetType() == CopyStepType && fs != nil {
-		return h.computeCopyStepHash(step, fs)
+func (h *StepHasher) ComputeHash(step *Step, tgt *target.Target, fs FileSystemInterface) (string, error) {
+	// Create a combined structure with step and target info
+	type combinedData struct {
+		Step   *Step          `json:"step"`
+		Target *target.Target `json:"target"`
 	}
 
-	// For other steps, just hash the configuration
-	data, err := json.Marshal(step)
+	combined := combinedData{
+		Step:   step,
+		Target: tgt,
+	}
+
+	// Special handling for CopyStep
+	if step.GetType() == CopyStepType && fs != nil {
+		return h.computeCopyStepHash(step, tgt, fs)
+	}
+
+	// For other steps, hash the combined configuration
+	data, err := json.Marshal(combined)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal step: %w", err)
+		return "", fmt.Errorf("failed to marshal step and target: %w", err)
 	}
 
 	// Compute SHA-256
@@ -63,16 +76,27 @@ func (h *StepHasher) ComputeHash(step *Step, fs FileSystemInterface) (string, er
 }
 
 // computeCopyStepHash generates a hash for a CopyStep that includes source file information
-func (h *StepHasher) computeCopyStepHash(step *Step, fs FileSystemInterface) (string, error) {
+func (h *StepHasher) computeCopyStepHash(step *Step, tgt *target.Target, fs FileSystemInterface) (string, error) {
 	copyStep := step.Copy
 	if copyStep == nil {
 		return "", fmt.Errorf("nil CopyStep")
 	}
 
-	// Start with the step configuration
-	stepData, err := json.Marshal(step)
+	// Create a combined structure with step and target info
+	type combinedData struct {
+		Step   *Step          `json:"step"`
+		Target *target.Target `json:"target"`
+	}
+
+	combined := combinedData{
+		Step:   step,
+		Target: tgt,
+	}
+
+	// Marshal the combined data
+	stepData, err := json.Marshal(combined)
 	if err != nil {
-		return "", fmt.Errorf("failed to marshal step: %w", err)
+		return "", fmt.Errorf("failed to marshal step and target: %w", err)
 	}
 
 	// Create a hasher that we'll update with all the relevant data

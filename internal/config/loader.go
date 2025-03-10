@@ -225,8 +225,6 @@ func (l *DefaultLoader) loadYAMLConfig(configPath string) (*Config, error) {
 
 	dataStr := replaceEnvVariables(string(data))
 
-	fmt.Println(dataStr)
-
 	var config Config
 	if err := yaml.Unmarshal([]byte(dataStr), &config); err != nil {
 		return nil, fmt.Errorf("failed to parse YAML: %w", err)

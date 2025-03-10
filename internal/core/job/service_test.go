@@ -27,13 +27,13 @@ func TestNewServiceWithOptions(t *testing.T) {
 
 // MockStepHasher implements StepHasherInterface for testing
 type MockStepHasher struct {
-	ComputeHashFunc func(step *Step, fs FileSystemInterface) (string, error)
+	ComputeHashFunc func(step *Step, tgt *target.Target, fs FileSystemInterface) (string, error)
 }
 
 // ComputeHash implements the hashing functionality
-func (m *MockStepHasher) ComputeHash(step *Step, fs FileSystemInterface) (string, error) {
+func (m *MockStepHasher) ComputeHash(step *Step, tgt *target.Target, fs FileSystemInterface) (string, error) {
 	if m.ComputeHashFunc != nil {
-		return m.ComputeHashFunc(step, fs)
+		return m.ComputeHashFunc(step, tgt, fs)
 	}
 	return "", errors.New("ComputeHash not implemented")
 }
@@ -45,7 +45,7 @@ func TestShouldExecuteStep(t *testing.T) {
 
 	// Create a mock StepHasher that always returns defaultHash
 	mockStepHasher := &MockStepHasher{
-		ComputeHashFunc: func(step *Step, fs FileSystemInterface) (string, error) {
+		ComputeHashFunc: func(step *Step, tgt *target.Target, fs FileSystemInterface) (string, error) {
 			return defaultHash, nil
 		},
 	}
@@ -245,7 +245,7 @@ func TestStepSkipping(t *testing.T) {
 				// Set up stored hashes for all steps
 				hashStore = make(map[string]string)
 				for i, step := range job.Steps {
-					hash, _ := (&StepHasher{}).ComputeHash(step, mockFS)
+					hash, _ := (&StepHasher{}).ComputeHash(step, tgt, mockFS)
 					key := fmt.Sprintf("%s:%s:%d", tgt.GetName(), job.Name, i)
 					hashStore[key] = hash
 				}
@@ -259,7 +259,7 @@ func TestStepSkipping(t *testing.T) {
 				// Set up stored hashes for all steps
 				hashStore = make(map[string]string)
 				for i, step := range job.Steps {
-					hash, _ := (&StepHasher{}).ComputeHash(step, mockFS)
+					hash, _ := (&StepHasher{}).ComputeHash(step, tgt, mockFS)
 					key := fmt.Sprintf("%s:%s:%d", tgt.GetName(), job.Name, i)
 					hashStore[key] = hash
 				}
@@ -274,7 +274,7 @@ func TestStepSkipping(t *testing.T) {
 				hashStore = make(map[string]string)
 
 				// Step 0 has matching hash
-				hash, _ := (&StepHasher{}).ComputeHash(job.Steps[0], mockFS)
+				hash, _ := (&StepHasher{}).ComputeHash(job.Steps[0], tgt, mockFS)
 				key := fmt.Sprintf("%s:%s:%d", tgt.GetName(), job.Name, 0)
 				hashStore[key] = hash
 
@@ -283,7 +283,7 @@ func TestStepSkipping(t *testing.T) {
 				hashStore[key] = "different_hash"
 
 				// Step 2 has matching hash, but we expect it to run due to step 1 change
-				hash, _ = (&StepHasher{}).ComputeHash(job.Steps[2], mockFS)
+				hash, _ = (&StepHasher{}).ComputeHash(job.Steps[2], tgt, mockFS)
 				key = fmt.Sprintf("%s:%s:%d", tgt.GetName(), job.Name, 2)
 				hashStore[key] = hash
 			},

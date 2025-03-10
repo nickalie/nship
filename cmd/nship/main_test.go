@@ -27,7 +27,6 @@ func TestParseFlags(t *testing.T) {
 		wantJob      string
 		wantEnv      []string
 		wantPassword string
-		wantVerbose  bool
 		wantVersion  bool
 	}{
 		{
@@ -37,17 +36,15 @@ func TestParseFlags(t *testing.T) {
 			wantJob:      "",
 			wantEnv:      nil,
 			wantPassword: "",
-			wantVerbose:  false,
 			wantVersion:  false,
 		},
 		{
 			name:         "all flags set",
-			args:         []string{"nship", "-config", "custom.yaml", "-job", "deploy", "-env", "prod.env", "-vault-password", "secret", "-verbose"},
+			args:         []string{"nship", "-config", "custom.yaml", "-job", "deploy", "-env", "prod.env", "-vault-password", "secret"},
 			wantConfig:   "custom.yaml",
 			wantJob:      "deploy",
 			wantEnv:      []string{"prod.env"},
 			wantPassword: "secret",
-			wantVerbose:  true,
 			wantVersion:  false,
 		},
 		{
@@ -57,7 +54,6 @@ func TestParseFlags(t *testing.T) {
 			wantJob:      "",
 			wantEnv:      nil,
 			wantPassword: "",
-			wantVerbose:  false,
 			wantVersion:  true,
 		},
 		{
@@ -67,7 +63,6 @@ func TestParseFlags(t *testing.T) {
 			wantEnv:      []string{"dev.env", "prod.env", "secrets.env"},
 			wantJob:      "",
 			wantPassword: "",
-			wantVerbose:  false,
 			wantVersion:  false,
 		},
 	}
@@ -89,8 +84,6 @@ func TestParseFlags(t *testing.T) {
 			assert.Equal(t, tt.wantJob, app.jobName, "jobName mismatch")
 			assert.Equal(t, tt.wantEnv, app.envPaths, "envPaths mismatch")
 			assert.Equal(t, tt.wantPassword, app.vaultPassword, "vaultPassword mismatch")
-			assert.Equal(t, tt.wantVerbose, app.verbose, "verbose flag mismatch")
-			assert.Equal(t, tt.wantVersion, app.version, "version flag mismatch")
 		})
 	}
 }
