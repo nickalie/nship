@@ -5,7 +5,6 @@ tasks:
     dir: cmd/nship
     cmds:
       - go build -o ../../bin/nship.exe
-      - npx shx cp ../../bin/nship.exe D:/develop/tools/go/path/bin
 
   lint:
     cmd: golangci-lint run ./...
