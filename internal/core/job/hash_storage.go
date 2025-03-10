@@ -39,7 +39,7 @@ func NewStepHasher() StepHasherInterface {
 	return &StepHasher{}
 }
 
-// FileSystem interface needed for accessing source files
+// FileSystemInterface is needed for accessing source files
 type FileSystemInterface interface {
 	Stat(name string) (os.FileInfo, error)
 	ReadDir(name string) ([]os.DirEntry, error)
@@ -71,8 +71,8 @@ func (h *StepHasher) ComputeHash(step *Step, tgt *target.Target, fs FileSystemIn
 	}
 
 	// Compute SHA-256
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:]), nil
+	hashSum := sha256.Sum256(data)
+	return hex.EncodeToString(hashSum[:]), nil
 }
 
 // computeCopyStepHash generates a hash for a CopyStep that includes source file information
@@ -110,8 +110,8 @@ func (h *StepHasher) computeCopyStepHash(step *Step, tgt *target.Target, fs File
 	if err != nil {
 		if os.IsNotExist(err) {
 			// If source doesn't exist, just use the step config
-			hash := sha256.Sum256(stepData)
-			return hex.EncodeToString(hash[:]), nil
+			hashSum := sha256.Sum256(stepData)
+			return hex.EncodeToString(hashSum[:]), nil
 		}
 		return "", fmt.Errorf("failed to stat source: %w", err)
 	}
@@ -139,45 +139,22 @@ func (h *StepHasher) hashDirectory(dir string, exclude []string, fs FileSystemIn
 		return fmt.Errorf("failed to read directory %s: %w", dir, err)
 	}
 
-	// Sort entries for deterministic ordering
-	entryNames := make([]string, 0, len(entries))
-	for _, entry := range entries {
-		entryNames = append(entryNames, entry.Name())
-	}
-	sort.Strings(entryNames)
+	entryNames := getSortedEntryNames(entries)
 
-	// Process each entry
 	for _, name := range entryNames {
 		path := filepath.Join(dir, name)
 
-		// Check if the file is excluded
-		isExcluded := false
-		for _, pattern := range exclude {
-			if matched, _ := filepath.Match(pattern, path); matched {
-				isExcluded = true
-				break
-			}
-			if matched, _ := filepath.Match(pattern, name); matched {
-				isExcluded = true
-				break
-			}
-		}
-
-		if isExcluded {
+		if isExcluded(path, name, exclude) {
 			continue
 		}
 
-		// Get file info
 		info, err := fs.Stat(path)
 		if err != nil {
 			return fmt.Errorf("failed to stat %s: %w", path, err)
 		}
 
-		// Add file info to hash
-		fileData := fmt.Sprintf("%s:%s:%d:%d", path, info.ModTime().String(), info.Size(), info.Mode())
-		hasher.Write([]byte(fileData))
+		addFileInfoToHash(path, info, hasher)
 
-		// Recurse into subdirectories
 		if info.IsDir() {
 			if err := h.hashDirectory(path, exclude, fs, hasher); err != nil {
 				return err
@@ -186,4 +163,30 @@ func (h *StepHasher) hashDirectory(dir string, exclude []string, fs FileSystemIn
 	}
 
 	return nil
+}
+
+func getSortedEntryNames(entries []os.DirEntry) []string {
+	entryNames := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		entryNames = append(entryNames, entry.Name())
+	}
+	sort.Strings(entryNames)
+	return entryNames
+}
+
+func isExcluded(path, name string, exclude []string) bool {
+	for _, pattern := range exclude {
+		if matched, _ := filepath.Match(pattern, path); matched {
+			return true
+		}
+		if matched, _ := filepath.Match(pattern, name); matched {
+			return true
+		}
+	}
+	return false
+}
+
+func addFileInfoToHash(path string, info os.FileInfo, hasher hash.Hash) {
+	fileData := fmt.Sprintf("%s:%s:%d:%d", path, info.ModTime().String(), info.Size(), info.Mode())
+	hasher.Write([]byte(fileData))
 }

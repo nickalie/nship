@@ -3,6 +3,7 @@ package ssh
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 
 	"github.com/nickalie/nship/internal/core/job"
@@ -58,8 +59,16 @@ func (b *DockerCommandBuilder) buildDockerCreateCommand() string {
 		args = append(args, "--restart", b.docker.Restart)
 	}
 
-	for k, v := range b.docker.Environment {
-		args = append(args, "-e", fmt.Sprintf("%s=%q", k, v))
+	// Get env keys and sort them for consistent order
+	envKeys := make([]string, 0, len(b.docker.Environment))
+	for k := range b.docker.Environment {
+		envKeys = append(envKeys, k)
+	}
+	sort.Strings(envKeys)
+
+	// Add environment variables in sorted order
+	for _, k := range envKeys {
+		args = append(args, "-e", fmt.Sprintf("%s=%q", k, b.docker.Environment[k]))
 	}
 
 	args = append(args, b.appendDockerArgs("-p", b.docker.Ports)...)

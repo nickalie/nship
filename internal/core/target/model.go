@@ -7,7 +7,7 @@ type Target struct {
 	Host       string `yaml:"host" json:"host" toml:"host" validate:"required,hostname|ip"`
 	User       string `yaml:"user" json:"user" toml:"user" validate:"required"`
 	Password   string `yaml:"password" json:"password" toml:"password" validate:"required_without=PrivateKey"`
-	PrivateKey string `yaml:"private_key,omitempty" json:"private_key,omitempty" toml:"private_key,omitempty" validate:"required_without=Password,omitempty,file"`
+	PrivateKey string `yaml:"private_key,omitempty" json:"private_key,omitempty" toml:"private_key,omitempty" validate:"required_without=Password,omitempty,file"` //nolint:lll // long struct tag needed for complete configuration
 	Port       int    `yaml:"port,omitempty" json:"port,omitempty" toml:"port,omitempty" validate:"omitempty,min=1,max=65535"`
 }
 

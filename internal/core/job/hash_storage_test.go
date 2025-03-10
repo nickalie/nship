@@ -118,6 +118,34 @@ func (m *MockDirEntryForHashing) Info() (os.FileInfo, error) {
 	return &MockFileInfoForHashing{}, nil
 }
 
+// createMockFilesystem creates a mock filesystem with configurable parameters
+func createMockFilesystem(isDir bool, modTime time.Time, fileSize int64, fileEntries []string) *MockFileSystemForHashing {
+	return &MockFileSystemForHashing{
+		StatFunc: func(name string) (os.FileInfo, error) {
+			if isDir && name == "src" {
+				return &MockFileInfoForHashing{
+					IsDirFunc: func() bool { return true },
+				}, nil
+			}
+			return &MockFileInfoForHashing{
+				ModTimeFunc: func() time.Time { return modTime },
+				SizeFunc:    func() int64 { return fileSize },
+				IsDirFunc:   func() bool { return false },
+			}, nil
+		},
+		ReadDirFunc: func(name string) ([]os.DirEntry, error) {
+			entries := make([]os.DirEntry, len(fileEntries))
+			for i, fileName := range fileEntries {
+				entries[i] = &MockDirEntryForHashing{
+					NameFunc:  func() string { return fileName },
+					IsDirFunc: func() bool { return false },
+				}
+			}
+			return entries, nil
+		},
+	}
+}
+
 func TestStepHasher_ComputeHash(t *testing.T) {
 	hasher := NewStepHasher()
 
@@ -244,16 +272,7 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		// Create a mock filesystem
 		fixedTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
 
-		mockFS := &MockFileSystemForHashing{
-			StatFunc: func(name string) (os.FileInfo, error) {
-				// Return different file info depending on the path
-				return &MockFileInfoForHashing{
-					ModTimeFunc: func() time.Time { return fixedTime },
-					SizeFunc:    func() int64 { return 100 },
-					IsDirFunc:   func() bool { return false },
-				}, nil
-			},
-		}
+		mockFS := createMockFilesystem(false, fixedTime, 100, nil)
 
 		// Create two identical copy steps
 		copyStep1 := &Step{Copy: &CopyStep{Src: "src/file.txt", Dst: "dst/file.txt"}}
@@ -270,15 +289,7 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		assert.Equal(t, hash1, hash2, "Identical copy steps should have the same hash")
 
 		// Now create a mock with different file content
-		mockFSModified := &MockFileSystemForHashing{
-			StatFunc: func(name string) (os.FileInfo, error) {
-				return &MockFileInfoForHashing{
-					ModTimeFunc: func() time.Time { return fixedTime.Add(time.Hour) }, // Different time
-					SizeFunc:    func() int64 { return 200 },                          // Different size
-					IsDirFunc:   func() bool { return false },
-				}, nil
-			},
-		}
+		mockFSModified := createMockFilesystem(false, fixedTime.Add(time.Hour), 200, nil)
 
 		// Compute hash with different file content
 		hash3, err := hasher.ComputeHash(copyStep1, testTarget, mockFSModified)
@@ -293,32 +304,7 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		fixedTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
 
 		// Create a mock filesystem with a directory
-		mockFS := &MockFileSystemForHashing{
-			StatFunc: func(name string) (os.FileInfo, error) {
-				if name == "src" {
-					return &MockFileInfoForHashing{
-						IsDirFunc: func() bool { return true },
-					}, nil
-				}
-				return &MockFileInfoForHashing{
-					ModTimeFunc: func() time.Time { return fixedTime },
-					SizeFunc:    func() int64 { return 100 },
-					IsDirFunc:   func() bool { return false },
-				}, nil
-			},
-			ReadDirFunc: func(name string) ([]os.DirEntry, error) {
-				return []os.DirEntry{
-					&MockDirEntryForHashing{
-						NameFunc:  func() string { return "file1.txt" },
-						IsDirFunc: func() bool { return false },
-					},
-					&MockDirEntryForHashing{
-						NameFunc:  func() string { return "file2.txt" },
-						IsDirFunc: func() bool { return false },
-					},
-				}, nil
-			},
-		}
+		mockFS := createMockFilesystem(true, fixedTime, 100, []string{"file1.txt", "file2.txt"})
 
 		// Create a copy step for a directory
 		dirCopyStep := &Step{Copy: &CopyStep{Src: "src", Dst: "dst"}}
@@ -328,32 +314,7 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		assert.NoError(t, err, "Failed to compute hash for directory copy step")
 
 		// Create a mock with different directory content
-		mockFSModified := &MockFileSystemForHashing{
-			StatFunc: func(name string) (os.FileInfo, error) {
-				if name == "src" {
-					return &MockFileInfoForHashing{
-						IsDirFunc: func() bool { return true },
-					}, nil
-				}
-				return &MockFileInfoForHashing{
-					ModTimeFunc: func() time.Time { return fixedTime },
-					SizeFunc:    func() int64 { return 100 },
-					IsDirFunc:   func() bool { return false },
-				}, nil
-			},
-			ReadDirFunc: func(name string) ([]os.DirEntry, error) {
-				return []os.DirEntry{
-					&MockDirEntryForHashing{
-						NameFunc:  func() string { return "file1.txt" },
-						IsDirFunc: func() bool { return false },
-					},
-					&MockDirEntryForHashing{
-						NameFunc:  func() string { return "file3.txt" }, // Different file
-						IsDirFunc: func() bool { return false },
-					},
-				}, nil
-			},
-		}
+		mockFSModified := createMockFilesystem(true, fixedTime, 100, []string{"file1.txt", "file3.txt"})
 
 		// Compute hash with different directory content
 		hash2, err := hasher.ComputeHash(dirCopyStep, testTarget, mockFSModified)

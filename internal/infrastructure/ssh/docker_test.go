@@ -155,10 +155,10 @@ func TestDockerCommandBuilder_BuildCommands(t *testing.T) {
 
 func TestBuildDockerCreateCommand(t *testing.T) {
 	tests := []struct {
-		name       string
-		dockerStep *job.DockerStep
-		expected   string
-		unexpected []string
+		name          string
+		dockerStep    *job.DockerStep
+		expectedParts []string
+		unexpected    []string
 	}{
 		{
 			name: "basic create command",
@@ -166,7 +166,7 @@ func TestBuildDockerCreateCommand(t *testing.T) {
 				Image: "nginx:latest",
 				Name:  "web",
 			},
-			expected: "docker create --name web nginx:latest",
+			expectedParts: []string{"docker create", "--name web", "nginx:latest"},
 		},
 		{
 			name: "create with restart policy",
@@ -175,7 +175,7 @@ func TestBuildDockerCreateCommand(t *testing.T) {
 				Name:    "cache",
 				Restart: "unless-stopped",
 			},
-			expected: "docker create --name cache --restart unless-stopped redis:alpine",
+			expectedParts: []string{"docker create", "--name cache", "--restart unless-stopped", "redis:alpine"},
 		},
 		{
 			name: "create with environment variables",
@@ -187,7 +187,13 @@ func TestBuildDockerCreateCommand(t *testing.T) {
 					"MYSQL_DATABASE":      "appdb",
 				},
 			},
-			expected: "docker create --name db -e MYSQL_ROOT_PASSWORD=\"rootpass\" -e MYSQL_DATABASE=\"appdb\" mysql:8",
+			expectedParts: []string{
+				"docker create",
+				"--name db",
+				"-e MYSQL_DATABASE=\"appdb\"",
+				"-e MYSQL_ROOT_PASSWORD=\"rootpass\"",
+				"mysql:8",
+			},
 		},
 		{
 			name: "create with ports and volumes",
@@ -197,7 +203,13 @@ func TestBuildDockerCreateCommand(t *testing.T) {
 				Ports:   []string{"8080:80"},
 				Volumes: []string{"wp-data:/var/www/html"},
 			},
-			expected: "docker create --name blog -p 8080:80 -v wp-data:/var/www/html wordpress:latest",
+			expectedParts: []string{
+				"docker create",
+				"--name blog",
+				"-p 8080:80",
+				"-v wp-data:/var/www/html",
+				"wordpress:latest",
+			},
 		},
 		{
 			name: "create with command",
@@ -206,7 +218,14 @@ func TestBuildDockerCreateCommand(t *testing.T) {
 				Name:     "task",
 				Commands: []string{"sh", "-c", "echo hello"},
 			},
-			expected: "docker create --name task alpine:latest sh -c echo hello",
+			expectedParts: []string{
+				"docker create",
+				"--name task",
+				"alpine:latest",
+				"sh",
+				"-c",
+				"echo hello",
+			},
 		},
 	}
 
@@ -215,11 +234,14 @@ func TestBuildDockerCreateCommand(t *testing.T) {
 			builder := NewDockerCommandBuilder(tt.dockerStep)
 			cmd := builder.buildDockerCreateCommand()
 
-			assert.Contains(t, cmd, tt.expected, "Command should contain expected content")
+			// Check that all expected parts are in the command
+			for _, expected := range tt.expectedParts {
+				assert.Contains(t, cmd, expected, "Command should contain '%s'", expected)
+			}
 
+			// Check that unexpected parts are not in the command
 			for _, unexpected := range tt.unexpected {
-				assert.NotContains(t, cmd, unexpected,
-					"Command should not contain '%s'", unexpected)
+				assert.NotContains(t, cmd, unexpected, "Command should not contain '%s'", unexpected)
 			}
 		})
 	}

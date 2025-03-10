@@ -76,39 +76,48 @@ func (s *Service) ExecuteJob(tgt *target.Target, job *Job) error {
 	var forceExecute bool
 
 	for i, step := range job.Steps {
-		// Check if we should execute this step
-		shouldExecute, err := s.shouldExecuteStep(tgt, job, i, step, forceExecute)
-		if err != nil {
-			return fmt.Errorf("failed to check step hash: %w", err)
+		if err := s.executeStep(client, tgt, job, i, step, &forceExecute); err != nil {
+			return err
 		}
+	}
 
-		if !shouldExecute {
-			fmt.Printf("Skipping step %d (unchanged)\n", i+1)
-			continue
+	return nil
+}
+
+func (s *Service) executeStep(client Client, tgt *target.Target, job *Job, stepIndex int, step *Step, forceExecute *bool) error {
+	shouldExecute, err := s.shouldExecuteStep(tgt, job, stepIndex, step, *forceExecute)
+	if err != nil {
+		return fmt.Errorf("failed to check step hash: %w", err)
+	}
+
+	if !shouldExecute {
+		fmt.Printf("Skipping step %d (unchanged)\n", stepIndex+1)
+		return nil
+	}
+
+	if err := client.ExecuteStep(step, stepIndex+1, len(job.Steps)); err != nil {
+		return fmt.Errorf("step %d failed: %w", stepIndex+1, err)
+	}
+
+	*forceExecute = true
+
+	if s.hashStorage != nil {
+		if err := s.storeStepHash(tgt, job, stepIndex, step); err != nil {
+			fmt.Printf("Warning: %v\n", err)
 		}
+	}
 
-		// Execute the step
-		if err := client.ExecuteStep(step, i+1, len(job.Steps)); err != nil {
-			return fmt.Errorf("step %d failed: %w", i+1, err)
-		}
+	return nil
+}
 
-		// After executing any step, all subsequent steps must also be executed
-		forceExecute = true
+func (s *Service) storeStepHash(tgt *target.Target, job *Job, stepIndex int, step *Step) error {
+	hash, err := s.stepHasher.ComputeHash(step, tgt, s.fileSystem)
+	if err != nil {
+		return fmt.Errorf("failed to compute step hash: %v", err)
+	}
 
-		// Store the hash for this step after successful execution
-		if s.hashStorage != nil {
-			hash, err := s.stepHasher.ComputeHash(step, tgt, s.fileSystem)
-			if err != nil {
-				// Log the error but continue
-				fmt.Printf("Warning: failed to compute step hash: %v\n", err)
-				continue
-			}
-
-			if err := s.hashStorage.SaveHash(tgt.GetName(), job.Name, i, hash); err != nil {
-				// Log the error but continue
-				fmt.Printf("Warning: failed to save step hash: %v\n", err)
-			}
-		}
+	if err := s.hashStorage.SaveHash(tgt.GetName(), job.Name, stepIndex, hash); err != nil {
+		return fmt.Errorf("failed to save step hash: %v", err)
 	}
 
 	return nil

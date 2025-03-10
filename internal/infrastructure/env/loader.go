@@ -62,7 +62,7 @@ func (l *DefaultLoader) loadVaultFile(path, password string) error {
 }
 
 // resolveVaultPassword determines the password to use for decryption
-func resolveVaultPassword(password string, vaultPath string) (string, error) {
+func resolveVaultPassword(password, vaultPath string) (string, error) {
 	if password != "" {
 		return password, nil
 	}

@@ -685,29 +685,53 @@ func TestExecCommand(t *testing.T) {
 	})
 }
 
-func TestLoadJSONConfig(t *testing.T) {
-	// Create temporary JSON config file
-	tmpDir, err := os.MkdirTemp("", "config-test-json")
-	assert.NoError(t, err, "Failed to create temp dir")
-	defer os.RemoveAll(tmpDir)
+// TestLoadJSONConfig and TestLoadTOMLConfig are similar, so let's refactor to avoid duplication
+func TestLoadConfigFormats(t *testing.T) {
+	testCases := []struct {
+		format        string
+		fileExtension string
+		configPath    string
+	}{
+		{
+			format:        "JSON",
+			fileExtension: "json",
+			configPath:    "config.json",
+		},
+		{
+			format:        "TOML",
+			fileExtension: "toml",
+			configPath:    "config.toml",
+		},
+	}
 
-	// Create a temporary private key file
-	privateKeyPath := filepath.Join(tmpDir, "key.pem")
-	err = os.WriteFile(privateKeyPath, []byte("dummy private key"), 0600)
-	assert.NoError(t, err, "Failed to create private key file")
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("Load%sConfig", tc.format), func(t *testing.T) {
+			// Create temporary config file
+			tmpDir, err := os.MkdirTemp("", fmt.Sprintf("config-test-%s", strings.ToLower(tc.format)))
+			assert.NoError(t, err, "Failed to create temp dir")
+			defer os.RemoveAll(tmpDir)
 
-	// Replace backslashes with forward slashes for JSON compatibility
-	jsonSafePath := strings.ReplaceAll(privateKeyPath, "\\", "/")
+			// Create a temporary private key file
+			privateKeyPath := filepath.Join(tmpDir, "key.pem")
+			err = os.WriteFile(privateKeyPath, []byte("dummy private key"), 0600)
+			assert.NoError(t, err, "Failed to create private key file")
 
-	configPath := filepath.Join(tmpDir, "config.json")
-	configContent := `{
+			// Replace backslashes with forward slashes for compatibility
+			safePath := strings.ReplaceAll(privateKeyPath, "\\", "/")
+
+			configPath := filepath.Join(tmpDir, tc.configPath)
+			var configContent string
+
+			switch tc.format {
+			case "JSON":
+				configContent = `{
       "targets": [
        {
         "name": "web-server",
         "host": "web.example.com",
         "user": "admin",
         "port": 2222,
-        "private_key": "` + jsonSafePath + `"
+        "private_key": "` + safePath + `"
        },
        {
         "host": "db.example.com",
@@ -732,53 +756,89 @@ func TestLoadJSONConfig(t *testing.T) {
        }
       ]
      }`
+			case "TOML":
+				configContent = `
+# TOML Configuration
 
-	err = os.WriteFile(configPath, []byte(configContent), 0644)
-	assert.NoError(t, err, "Failed to write config file")
+[[targets]]
+name = "web-server"
+host = "web.example.com"
+user = "admin"
+port = 2222
+private_key = "` + safePath + `"
 
-	// Load the config
-	loader := NewLoader()
-	config, err := loader.Load(configPath)
-	assert.NoError(t, err, "Failed to load config")
+[[targets]]
+host = "db.example.com"
+user = "admin"
+password = "password123"
 
-	// Verify targets
-	assert.Len(t, config.Targets, 2, "Expected 2 targets")
+[[jobs]]
+name = "setup"
+steps = [
+  { run = "mkdir -p /var/www" },
+  { run = "chown www-data:www-data /var/www" }
+]
 
-	// First target
-	assert.Equal(t, "web-server", config.Targets[0].Name, "Incorrect first target name")
-	assert.Equal(t, "web.example.com", config.Targets[0].Host, "Incorrect first target host")
-	assert.Equal(t, 2222, config.Targets[0].Port, "Incorrect first target port")
-	assert.Equal(t, jsonSafePath, config.Targets[0].PrivateKey, "Incorrect first target private key")
+[[jobs]]
+name = "deploy"
+steps = [
+  { copy = { src = "./config/nginx.conf", dst = "/etc/nginx/nginx.conf" } },
+  { docker = { image = "nginx:latest", name = "web", ports = ["80:80"] } }
+]
+`
+			}
 
-	// Second target
-	assert.Equal(t, "db.example.com", config.Targets[1].Host, "Incorrect second target host")
-	assert.Equal(t, "password123", config.Targets[1].Password, "Incorrect second target password")
+			err = os.WriteFile(configPath, []byte(configContent), 0644)
+			assert.NoError(t, err, "Failed to write config file")
 
-	// Verify jobs
-	assert.Len(t, config.Jobs, 2, "Expected 2 jobs")
+			// Load the config
+			loader := NewLoader()
+			config, err := loader.Load(configPath)
+			assert.NoError(t, err, "Failed to load config")
 
-	// Setup job
-	assert.Equal(t, "setup", config.Jobs[0].Name, "Incorrect first job name")
-	assert.Len(t, config.Jobs[0].Steps, 2, "Expected setup job to have 2 steps")
-	assert.Equal(t, "mkdir -p /var/www", config.Jobs[0].Steps[0].Run, "Incorrect first step command")
+			// Verify targets
+			assert.Len(t, config.Targets, 2, "Expected 2 targets")
 
-	// Deploy job
-	assert.Equal(t, "deploy", config.Jobs[1].Name, "Incorrect second job name")
+			// First target
+			assert.Equal(t, "web-server", config.Targets[0].Name, "Incorrect first target name")
+			assert.Equal(t, "web.example.com", config.Targets[0].Host, "Incorrect first target host")
+			assert.Equal(t, 2222, config.Targets[0].Port, "Incorrect first target port")
+			assert.Equal(t, safePath, config.Targets[0].PrivateKey, "Incorrect first target private key")
+
+			// Second target
+			assert.Equal(t, "db.example.com", config.Targets[1].Host, "Incorrect second target host")
+			assert.Equal(t, "password123", config.Targets[1].Password, "Incorrect second target password")
+
+			// Verify jobs
+			assert.Len(t, config.Jobs, 2, "Expected 2 jobs")
+
+			// Setup job
+			assert.Equal(t, "setup", config.Jobs[0].Name, "Incorrect first job name")
+			assert.Len(t, config.Jobs[0].Steps, 2, "Expected setup job to have 2 steps")
+			assert.Equal(t, "mkdir -p /var/www", config.Jobs[0].Steps[0].Run, "Incorrect first step command")
+
+			// Deploy job
+			assert.Equal(t, "deploy", config.Jobs[1].Name, "Incorrect second job name")
+		})
+	}
 }
 
-func TestReplaceEnvVariablesInJSON(t *testing.T) {
+// TestReplaceEnvVariables tests environment variable replacement in different formats
+func TestReplaceEnvVariablesInFormats(t *testing.T) {
 	// Set environment variables for testing
 	os.Setenv("TEST_HOST", "test.example.com")
 	os.Setenv("TEST_USER", "testuser")
 	os.Setenv("TEST_PORT", "1234")
 
-	// Create temporary JSON config file with environment variables
-	tmpDir, err := os.MkdirTemp("", "config-test-json-env")
-	assert.NoError(t, err, "Failed to create temp dir")
-	defer os.RemoveAll(tmpDir)
-
-	configPath := filepath.Join(tmpDir, "config.json")
-	configContent := `{
+	testCases := []struct {
+		format        string
+		fileExtension string
+		configContent string
+	}{
+		{
+			format:        "JSON",
+			fileExtension: "json",
+			configContent: `{
   "targets": [
    {
     "host": "${TEST_HOST}",
@@ -797,20 +857,52 @@ func TestReplaceEnvVariablesInJSON(t *testing.T) {
     ]
    }
   ]
- }`
+ }`,
+		},
+		{
+			format:        "TOML",
+			fileExtension: "toml",
+			configContent: `
+[[targets]]
+host = "${TEST_HOST}"
+user = "${TEST_USER}"
+port = ${TEST_PORT}
+password = "secret"
 
-	err = os.WriteFile(configPath, []byte(configContent), 0644)
-	assert.NoError(t, err, "Failed to write config file")
+[[jobs]]
+name = "test-job"
+steps = [
+  { run = "echo 'Hello World'" }
+]
+`,
+		},
+	}
 
-	// Load the config
-	loader := NewLoader()
-	config, err := loader.Load(configPath)
-	assert.NoError(t, err, "Failed to load config")
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("ReplaceEnvVariablesIn%s", tc.format), func(t *testing.T) {
+			// Create temporary config file
+			tmpDir, err := os.MkdirTemp("", fmt.Sprintf("config-test-%s-env", strings.ToLower(tc.format)))
+			assert.NoError(t, err, "Failed to create temp dir")
+			defer os.RemoveAll(tmpDir)
 
-	// Verify environment variable substitution
-	assert.Equal(t, "test.example.com", config.Targets[0].Host, "Environment variable not substituted in host")
-	assert.Equal(t, "testuser", config.Targets[0].User, "Environment variable not substituted in user")
-	assert.Equal(t, 1234, config.Targets[0].Port, "Environment variable not substituted in port")
+			configPath := filepath.Join(tmpDir, "config."+tc.fileExtension)
+			err = os.WriteFile(configPath, []byte(tc.configContent), 0644)
+			assert.NoError(t, err, "Failed to write config file")
+
+			// Load the config
+			loader := NewLoader()
+			config, err := loader.Load(configPath)
+			assert.NoError(t, err, "Failed to load config")
+
+			// Verify environment variable substitution
+			assert.Equal(t, "test.example.com", config.Targets[0].Host,
+				"Environment variable not substituted in host")
+			assert.Equal(t, "testuser", config.Targets[0].User,
+				"Environment variable not substituted in user")
+			assert.Equal(t, 1234, config.Targets[0].Port,
+				"Environment variable not substituted in port")
+		})
+	}
 }
 
 func TestInvalidJSONConfig(t *testing.T) {
@@ -844,122 +936,4 @@ func TestInvalidJSONConfig(t *testing.T) {
 	// Expect parsing error
 	assert.Error(t, err, "Expected parsing error but got nil")
 	assert.Contains(t, err.Error(), "failed to parse JSON", "Error message does not mention JSON parsing failure")
-}
-
-func TestLoadTOMLConfig(t *testing.T) {
-	// Create temporary TOML config file
-	tmpDir, err := os.MkdirTemp("", "config-test-toml")
-	assert.NoError(t, err, "Failed to create temp dir")
-	defer os.RemoveAll(tmpDir)
-
-	// Create a temporary private key file
-	privateKeyPath := filepath.Join(tmpDir, "key.pem")
-	err = os.WriteFile(privateKeyPath, []byte("dummy private key"), 0600)
-	assert.NoError(t, err, "Failed to create private key file")
-
-	// Replace backslashes with forward slashes for TOML compatibility
-	tomlSafePath := strings.ReplaceAll(privateKeyPath, "\\", "/")
-
-	configPath := filepath.Join(tmpDir, "config.toml")
-	configContent := `
-# TOML Configuration
-
-[[targets]]
-name = "web-server"
-host = "web.example.com"
-user = "admin"
-port = 2222
-private_key = "` + tomlSafePath + `"
-
-[[targets]]
-host = "db.example.com"
-user = "admin"
-password = "password123"
-
-[[jobs]]
-name = "setup"
-steps = [
-  { run = "mkdir -p /var/www" },
-  { run = "chown www-data:www-data /var/www" }
-]
-
-[[jobs]]
-name = "deploy"
-steps = [
-  { copy = { src = "./config/nginx.conf", dst = "/etc/nginx/nginx.conf" } },
-  { docker = { image = "nginx:latest", name = "web", ports = ["80:80"] } }
-]
-`
-
-	err = os.WriteFile(configPath, []byte(configContent), 0644)
-	assert.NoError(t, err, "Failed to write config file")
-
-	// Load the config
-	loader := NewLoader()
-	config, err := loader.Load(configPath)
-	assert.NoError(t, err, "Failed to load config")
-
-	// Verify targets
-	assert.Len(t, config.Targets, 2, "Expected 2 targets")
-
-	// First target
-	assert.Equal(t, "web-server", config.Targets[0].Name, "Incorrect first target name")
-	assert.Equal(t, "web.example.com", config.Targets[0].Host, "Incorrect first target host")
-	assert.Equal(t, 2222, config.Targets[0].Port, "Incorrect first target port")
-	assert.Equal(t, tomlSafePath, config.Targets[0].PrivateKey, "Incorrect first target private key")
-
-	// Second target
-	assert.Equal(t, "db.example.com", config.Targets[1].Host, "Incorrect second target host")
-	assert.Equal(t, "password123", config.Targets[1].Password, "Incorrect second target password")
-
-	// Verify jobs
-	assert.Len(t, config.Jobs, 2, "Expected 2 jobs")
-
-	// Setup job
-	assert.Equal(t, "setup", config.Jobs[0].Name, "Incorrect first job name")
-	assert.Len(t, config.Jobs[0].Steps, 2, "Expected setup job to have 2 steps")
-	assert.Equal(t, "mkdir -p /var/www", config.Jobs[0].Steps[0].Run, "Incorrect first step command")
-
-	// Deploy job
-	assert.Equal(t, "deploy", config.Jobs[1].Name, "Incorrect second job name")
-}
-
-func TestReplaceEnvVariablesInTOML(t *testing.T) {
-	// Set environment variables for testing
-	os.Setenv("TEST_HOST", "test.example.com")
-	os.Setenv("TEST_USER", "testuser")
-	os.Setenv("TEST_PORT", "1234")
-
-	// Create temporary TOML config file with environment variables
-	tmpDir, err := os.MkdirTemp("", "config-test-toml-env")
-	assert.NoError(t, err, "Failed to create temp dir")
-	defer os.RemoveAll(tmpDir)
-
-	configPath := filepath.Join(tmpDir, "config.toml")
-	configContent := `
-[[targets]]
-host = "${TEST_HOST}"
-user = "${TEST_USER}"
-port = ${TEST_PORT}
-password = "secret"
-
-[[jobs]]
-name = "test-job"
-steps = [
-  { run = "echo 'Hello World'" }
-]
-`
-
-	err = os.WriteFile(configPath, []byte(configContent), 0644)
-	assert.NoError(t, err, "Failed to write config file")
-
-	// Load the config
-	loader := NewLoader()
-	config, err := loader.Load(configPath)
-	assert.NoError(t, err, "Failed to load config")
-
-	// Verify environment variable substitution
-	assert.Equal(t, "test.example.com", config.Targets[0].Host, "Environment variable not substituted in host")
-	assert.Equal(t, "testuser", config.Targets[0].User, "Environment variable not substituted in user")
-	assert.Equal(t, 1234, config.Targets[0].Port, "Environment variable not substituted in port")
 }
