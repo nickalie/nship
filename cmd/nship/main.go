@@ -38,12 +38,12 @@ func (app *Application) ParseFlags() {
 	flag.StringVar(&app.configPath, "config", app.configPath, "Path to configuration file")
 	flag.StringVar(&app.jobName, "job", app.jobName, "Name of specific job to run")
 
-	// Use a custom variable to collect env file paths
-	envFiles := flag.String("env-file", "", "Path to environment file (can be specified multiple times)")
-	// Use a callback function to process each env-file flag
-	envFilesSlice := []string{}
+	// Use only a callback function to process each env-file flag
 	flag.Func("env-file", "Path to environment file (can be specified multiple times)", func(value string) error {
-		envFilesSlice = append(envFilesSlice, value)
+		// Handle both comma-separated values and multiple flag occurrences
+		if value != "" {
+			app.envPaths = append(app.envPaths, strings.Split(value, ",")...)
+		}
 		return nil
 	})
 
@@ -52,14 +52,6 @@ func (app *Application) ParseFlags() {
 	flag.BoolVar(&app.version, "version", app.version, "Show version information")
 
 	flag.Parse()
-
-	// Process env files from both methods (for backward compatibility)
-	if *envFiles != "" {
-		app.envPaths = append(app.envPaths, strings.Split(*envFiles, ",")...)
-	}
-	if len(envFilesSlice) > 0 {
-		app.envPaths = append(app.envPaths, envFilesSlice...)
-	}
 }
 
 // Run executes the application

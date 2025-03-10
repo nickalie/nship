@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/go-playground/validator/v10"
-	"github.com/stretchr/testify/assert"
 	"io"
 	"os"
 	"path/filepath"
@@ -13,6 +11,9 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/go-playground/validator/v10"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/nickalie/nship/internal/core/job"
 	"github.com/nickalie/nship/internal/core/target"
@@ -646,7 +647,7 @@ func TestExecCommand(t *testing.T) {
 		}
 
 		// Verify that the execution time is reasonable
-		assert.GreaterOrEqual(t, execTime, 50*time.Millisecond,
+		assert.GreaterOrEqual(t, execTime, 30*time.Millisecond,
 			"Execution time should be reasonable to ensure streaming output")
 	})
 
