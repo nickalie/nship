@@ -39,17 +39,27 @@ func (app *Application) ParseFlags() {
 	flag.StringVar(&app.configPath, "config", app.configPath, "Path to configuration file")
 	flag.StringVar(&app.jobName, "job", app.jobName, "Name of specific job to run")
 
-	var envPathsStr string
-	flag.StringVar(&envPathsStr, "env", "", "Comma-separated paths to environment files")
+	// Use a custom variable to collect env file paths
+	envFiles := flag.String("env-file", "", "Path to environment file (can be specified multiple times)")
+	// Use a callback function to process each env-file flag
+	envFilesSlice := []string{}
+	flag.Func("env-file", "Path to environment file (can be specified multiple times)", func(value string) error {
+		envFilesSlice = append(envFilesSlice, value)
+		return nil
+	})
+
 	flag.StringVar(&app.vaultPassword, "vault-password", app.vaultPassword, "Password for Ansible Vault file")
 	flag.BoolVar(&app.noSkip, "no-skip", app.noSkip, "Disable skipping unchanged steps")
 	flag.BoolVar(&app.version, "version", app.version, "Show version information")
 
 	flag.Parse()
 
-	// Move this after flag.Parse() to access the parsed value
-	if envPathsStr != "" {
-		app.envPaths = strings.Split(envPathsStr, ",")
+	// Process env files from both methods (for backward compatibility)
+	if *envFiles != "" {
+		app.envPaths = append(app.envPaths, strings.Split(*envFiles, ",")...)
+	}
+	if len(envFilesSlice) > 0 {
+		app.envPaths = append(app.envPaths, envFilesSlice...)
 	}
 }
 

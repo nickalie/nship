@@ -46,10 +46,22 @@ Additional options:
 
 - `--config=<path>`: Path to the configuration file (default: `nship.yaml`).
 - `--job=<name>`: Name of the job to run.
-- `--env=<paths>`: Comma-separated paths to environment files.
+- `--env-file=<path>`: Path to an environment file (can be specified multiple times).
 - `--vault-password=<password>`: Password for decrypting Ansible Vault files.
 - `--no-skip`: Disable skipping unchanged steps.
 - `--version`: Show version information.
+
+#### Environment Files
+
+Environment files can be specified in several ways:
+
+```sh
+# Single environment file
+nship --env-file=dev.env
+
+# Multiple environment files using multiple flags
+nship --env-file=dev.env --env-file=secrets.env
+```
 
 ## Configuration
 
@@ -216,22 +228,6 @@ Runs a Docker container on the target. If the container already exists, it will 
 - `labels` (map of key-value pairs, optional): Labels to assign to the container.
 - `networks` (list of strings, optional): List of network names to connect the container.
 - `restart` (string, optional): Restart policy (`no`, `on-failure`, `always`, `unless-stopped`).
-- `commands` (list of strings, optional): List of commands to run inside the container.: Docker image to use.
-- `name`: Name of the Docker container.
-- `ports`: List of port mappings in the format `host:container`.
-- `environment`: List of environment variables.
-- `volumes`: List of volume mounts in the format `host_path:container_path`.
-- `labels`: Labels to assign to the container.
-- `networks`: List of network names to connect the container.
-- `restart`: Restart policy (`no`, `on-failure`, `always`, `unless-stopped`).
-- `commands`: List of commands to run inside the container.`image` (string, required): Docker image to use.
-- `name` (string, required): Name of the Docker container.
-- `ports` (list of strings, optional): List of port mappings in the format `host:container`.
-- `environment` (list of strings, optional): List of environment variables.
-- `volumes` (list of strings, optional): List of volume mounts in the format `host_path:container_path`.
-- `labels` (map of key-value pairs, optional): Labels to assign to the container.
-- `networks` (list of strings, optional): List of network names to connect the container.
-- `restart` (string, optional): Restart policy (`no`, `on-failure`, `always`, `unless-stopped`).
 - `commands` (list of strings, optional): List of commands to run inside the container.
 
 ## Vault Support
@@ -239,7 +235,7 @@ Runs a Docker container on the target. If the container already exists, it will 
 nship supports Ansible Vault for secure credentials management. To decrypt a vault file, use:
 
 ```sh
-nship --env=env.vault --vault-password=yourpassword
+nship --env-file=env.vault --vault-password=yourpassword
 ```
 The VAULT_PASSWORD environment variable can also be used to provide the password for decrypting Ansible Vault files, allowing for more secure automation workflows.
 

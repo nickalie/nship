@@ -40,7 +40,7 @@ func TestParseFlags(t *testing.T) {
 		},
 		{
 			name:         "all flags set",
-			args:         []string{"nship", "-config", "custom.yaml", "-job", "deploy", "-env", "prod.env", "-vault-password", "secret"},
+			args:         []string{"nship", "-config", "custom.yaml", "-job", "deploy", "-env-file", "prod.env", "-vault-password", "secret"},
 			wantConfig:   "custom.yaml",
 			wantJob:      "deploy",
 			wantEnv:      []string{"prod.env"},
@@ -57,10 +57,28 @@ func TestParseFlags(t *testing.T) {
 			wantVersion:  true,
 		},
 		{
-			name:         "multiple env files",
-			args:         []string{"nship", "-env", "dev.env,prod.env,secrets.env"},
+			name:         "comma-separated env files (backward compatibility)",
+			args:         []string{"nship", "-env-file", "dev.env,prod.env,secrets.env"},
 			wantConfig:   "nship.yaml",
 			wantEnv:      []string{"dev.env", "prod.env", "secrets.env"},
+			wantJob:      "",
+			wantPassword: "",
+			wantVersion:  false,
+		},
+		{
+			name:         "multiple env-file flags",
+			args:         []string{"nship", "-env-file", "dev.env", "-env-file", "prod.env", "-env-file", "secrets.env"},
+			wantConfig:   "nship.yaml",
+			wantEnv:      []string{"dev.env", "prod.env", "secrets.env"},
+			wantJob:      "",
+			wantPassword: "",
+			wantVersion:  false,
+		},
+		{
+			name:         "mixed env-file usage",
+			args:         []string{"nship", "-env-file", "dev.env,stage.env", "-env-file", "prod.env"},
+			wantConfig:   "nship.yaml",
+			wantEnv:      []string{"dev.env", "stage.env", "prod.env"},
 			wantJob:      "",
 			wantPassword: "",
 			wantVersion:  false,
@@ -86,6 +104,32 @@ func TestParseFlags(t *testing.T) {
 			assert.Equal(t, tt.wantPassword, app.vaultPassword, "vaultPassword mismatch")
 		})
 	}
+}
+
+// Add a new test function to specifically test the multiple env-file flags
+func TestMultipleEnvFilesFlag(t *testing.T) {
+	// Save original os.Args and flag.CommandLine
+	oldArgs := os.Args
+	oldFlagCommandLine := flag.CommandLine
+
+	defer func() {
+		// Restore original values
+		os.Args = oldArgs
+		flag.CommandLine = oldFlagCommandLine
+	}()
+
+	// Reset flag.CommandLine
+	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
+
+	// Set up args with multiple env-file flags
+	os.Args = []string{"nship", "-env-file", "first.env", "-env-file", "second.env"}
+
+	// Create and initialize the app
+	app := NewApplication()
+	app.ParseFlags()
+
+	// Check that both env files were added
+	assert.Equal(t, []string{"first.env", "second.env"}, app.envPaths, "Failed to collect multiple env-file flags")
 }
 
 func TestEnvPathsParsing(t *testing.T) {
