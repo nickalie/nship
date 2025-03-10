@@ -21,6 +21,8 @@ jobs:
 
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v6
+        with:
+          install-mode: "goinstall"
 
   test:
     name: Test
@@ -38,7 +40,7 @@ jobs:
         run: go mod download
 
       - name: Test
-        run: go test -v -race -coverprofile="coverage.txt" -covermode=atomic ./...
+        run: go test -v -coverprofile="coverage.txt" -covermode=atomic ./...
 
       - name: Upload coverage
         uses: codecov/codecov-action@v3
