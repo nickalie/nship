@@ -185,6 +185,87 @@ func TestNewApp(t *testing.T) {
 	assert.NotNil(t, app.jobService, "App has nil jobService")
 }
 
+func TestNewAppWithSkipUnchanged(t *testing.T) {
+	tests := []struct {
+		name          string
+		skipUnchanged bool
+	}{
+		{
+			name:          "with skip unchanged enabled",
+			skipUnchanged: true,
+		},
+		{
+			name:          "with skip unchanged disabled",
+			skipUnchanged: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := NewAppWithSkipUnchanged(tt.skipUnchanged)
+
+			// Verify app was created with all required dependencies
+			assert.NotNil(t, app, "NewAppWithSkipUnchanged() returned nil")
+			assert.NotNil(t, app.envLoader, "App has nil envLoader")
+			assert.NotNil(t, app.configLoader, "App has nil configLoader")
+			assert.NotNil(t, app.jobService, "App has nil jobService")
+
+			// We can't directly test if skipUnchanged was set correctly internally
+			// since it's not exposed as a property, but we can verify the app was created
+			// without errors. The actual behavior would be tested in integration tests.
+		})
+	}
+}
+
+func TestNewAppWithOptions(t *testing.T) {
+	t.Run("with no options", func(t *testing.T) {
+		app := NewAppWithOptions()
+
+		// Verify app was created with all required dependencies
+		assert.NotNil(t, app, "NewAppWithOptions() returned nil")
+		assert.NotNil(t, app.envLoader, "App has nil envLoader")
+		assert.NotNil(t, app.configLoader, "App has nil configLoader")
+		assert.NotNil(t, app.jobService, "App has nil jobService")
+	})
+
+	t.Run("with WithSkipUnchanged option", func(t *testing.T) {
+		app := NewAppWithOptions(WithSkipUnchanged(true))
+
+		// Verify app was created with all required dependencies
+		assert.NotNil(t, app, "NewAppWithOptions() returned nil")
+		assert.NotNil(t, app.envLoader, "App has nil envLoader")
+		assert.NotNil(t, app.configLoader, "App has nil configLoader")
+		assert.NotNil(t, app.jobService, "App has nil jobService")
+
+		// While we can't directly check skipUnchanged's value,
+		// we can verify that a jobService was created
+	})
+
+	t.Run("with multiple options", func(t *testing.T) {
+		// Create a custom option for testing
+		customOption := func(app *App) {
+			// Replace the job service with a mock
+			mockJobService := new(MockJobService)
+			app.jobService = mockJobService
+		}
+
+		app := NewAppWithOptions(
+			WithSkipUnchanged(true),
+			customOption,
+		)
+
+		// Verify app was created with all dependencies
+		assert.NotNil(t, app, "NewAppWithOptions() returned nil")
+		assert.NotNil(t, app.envLoader, "App has nil envLoader")
+		assert.NotNil(t, app.configLoader, "App has nil configLoader")
+		assert.NotNil(t, app.jobService, "App has nil jobService")
+
+		// Verify custom option was applied
+		_, isMock := app.jobService.(*MockJobService)
+		assert.True(t, isMock, "Custom option was not properly applied")
+	})
+}
+
 func TestGetJobsToRun(t *testing.T) {
 	allJobs := []*job.Job{
 		{Name: "job1", Steps: []*job.Step{{Run: "echo job1"}}},
