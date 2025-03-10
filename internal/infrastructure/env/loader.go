@@ -100,7 +100,7 @@ func setEnvironmentVariables(decrypted string) error {
 func promptVaultPassword(vaultPath string) (string, error) {
 	fmt.Printf("Enter vault password for %s: ", vaultPath)
 
-	password, err := term.ReadPassword(int(syscall.Stdin))
+	password, err := term.ReadPassword(int(syscall.Stdin)) //nolint:unconvert //int is required for Windows compatibility
 	if err == nil {
 		fmt.Println() // Add newline after password input
 		return string(password), nil
