@@ -9,5 +9,9 @@ tasks:
 
   lint:
     cmd: golangci-lint run ./...
+
   lint-fix:
     cmd: golangci-lint run ./...
+
+  test:
+    cmd: go test ./...

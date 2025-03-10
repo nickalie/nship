@@ -19,7 +19,6 @@ type Application struct {
 	envPaths      []string
 	vaultPassword string
 	noSkip        bool
-	verbose       bool
 	version       bool
 	versionString string
 }

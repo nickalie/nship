@@ -74,24 +74,7 @@ func RunConfigWithOptions(cfg *Config, jobName string, skipUnchanged bool, hashS
 
 // RunConfig executes the deployment (runs all steps regardless of change status)
 func RunConfig(cfg *Config, jobName string) error {
-	var jobs []*job.Job
-
-	// Filter jobs by name if specified
-	if jobName != "" {
-		for _, j := range cfg.Jobs {
-			if j.Name == jobName {
-				jobs = []*job.Job{j}
-				break
-			}
-		}
-		if jobs == nil {
-			return fmt.Errorf("job '%s' not found", jobName)
-		}
-	} else {
-		jobs = cfg.Jobs
-	}
-
-	// Create service and execute jobs
+	// Call internal implementation with skipUnchanged=false and no hash storage
 	return runConfigInternal(cfg, jobName, false, nil)
 }
 

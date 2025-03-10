@@ -16,6 +16,7 @@ type MockFileSystem struct {
 	RemoveAllFunc func(path string) error
 }
 
+// Stat mocks the Stat method of FileSystem interface
 func (m *MockFileSystem) Stat(name string) (os.FileInfo, error) {
 	if m.StatFunc != nil {
 		return m.StatFunc(name)
@@ -23,6 +24,7 @@ func (m *MockFileSystem) Stat(name string) (os.FileInfo, error) {
 	return nil, os.ErrNotExist
 }
 
+// Open mocks the Open method of FileSystem interface
 func (m *MockFileSystem) Open(name string) (io.ReadCloser, error) {
 	if m.OpenFunc != nil {
 		return m.OpenFunc(name)
@@ -30,6 +32,7 @@ func (m *MockFileSystem) Open(name string) (io.ReadCloser, error) {
 	return nil, os.ErrNotExist
 }
 
+// ReadDir mocks the ReadDir method of FileSystem interface
 func (m *MockFileSystem) ReadDir(name string) ([]os.DirEntry, error) {
 	if m.ReadDirFunc != nil {
 		return m.ReadDirFunc(name)
@@ -37,6 +40,7 @@ func (m *MockFileSystem) ReadDir(name string) ([]os.DirEntry, error) {
 	return nil, os.ErrNotExist
 }
 
+// ReadFile mocks the ReadFile method of FileSystem interface
 func (m *MockFileSystem) ReadFile(name string) ([]byte, error) {
 	if m.ReadFileFunc != nil {
 		return m.ReadFileFunc(name)
@@ -44,6 +48,7 @@ func (m *MockFileSystem) ReadFile(name string) ([]byte, error) {
 	return nil, os.ErrNotExist
 }
 
+// WriteFile mocks the WriteFile method of FileSystem interface
 func (m *MockFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
 	if m.WriteFileFunc != nil {
 		return m.WriteFileFunc(name, data, perm)
@@ -51,6 +56,7 @@ func (m *MockFileSystem) WriteFile(name string, data []byte, perm os.FileMode) e
 	return os.ErrNotExist
 }
 
+// MkdirAll mocks the MkdirAll method of FileSystem interface
 func (m *MockFileSystem) MkdirAll(path string, perm os.FileMode) error {
 	if m.MkdirAllFunc != nil {
 		return m.MkdirAllFunc(path, perm)
@@ -58,6 +64,7 @@ func (m *MockFileSystem) MkdirAll(path string, perm os.FileMode) error {
 	return os.ErrNotExist
 }
 
+// RemoveAll mocks the RemoveAll method of FileSystem interface
 func (m *MockFileSystem) RemoveAll(path string) error {
 	if m.RemoveAllFunc != nil {
 		return m.RemoveAllFunc(path)
