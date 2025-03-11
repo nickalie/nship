@@ -83,8 +83,8 @@ jobs:
     steps:
       - run: echo "Deploying application..."
       - copy:
-          src: ./app/
-          dst: /var/www/app/
+          local: ./app/
+          remote: /var/www/app/
       - docker:
           image: myapp:latest
           name: myapp-container
@@ -103,7 +103,7 @@ export default {
       name: "deploy-app",
       steps: [
         { run: "echo \"Deploying application...\"" },
-        { copy: { src: "./app/", dst: "/var/www/app/" } },
+        { copy: { local: "./app/", remote: "/var/www/app/" } },
         { docker: { image: "myapp:latest", name: "myapp-container", ports: ["8080:80"] } }
       ]
     }
@@ -160,8 +160,8 @@ name = "deploy-app"
 run = "echo 'Deploying application...'"
 
 [[jobs.steps.copy]]
-src = "./app/"
-dst = "/var/www/app/"
+local = "./app/"
+remote = "/var/www/app/"
 
 [[jobs.steps.docker]]
 image = "myapp:latest"
@@ -191,8 +191,8 @@ Copies files to a remote target. Identical files are not copied to optimize perf
 
 ```yaml
 - copy:
-    src: ./config/
-    dst: /etc/myapp/
+    local: ./config/
+    remote: /etc/myapp/
 ```
 
 ### Docker Step
@@ -214,7 +214,6 @@ Runs a Docker container on the target. If the container already exists, it will 
       - "custom-network"
     restart: "always"
     commands:
-      - "npm install"
       - "npm start"
 ```
 
