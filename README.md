@@ -65,12 +65,52 @@ nship --env-file=dev.env --env-file=secrets.env
 
 ## Configuration
 
-nship uses a structured configuration file that can be written in YAML, JSON, TOML, TypeScript, JavaScript, Golang.
+nship offers exceptional flexibility in how you define your deployment configurations. Choose the format that best fits your workflow:
 
-For TypeScript and JavaScript configuration files, Node.js must be installed. For Golang configuration files, Go must be installed.
+### Configuration Formats
 
-### Example Configuration (YAML)
+- **YAML/JSON/TOML**: Simple, structured formats for static configurations
+- **TypeScript/JavaScript**: Leverage the full power of a programming language with type safety, variables, and logic
+- **Golang**: Use Go's strong typing and performance for complex configuration needs
+- **Command Output**: Generate configurations dynamically using any script or command
 
+### Dynamic Configuration with Programming Languages
+
+#### TypeScript/JavaScript Benefits
+- **Type Safety**: Catch configuration errors before runtime with TypeScript
+- **Code Reuse**: Create functions for repeated configuration patterns
+- **Environment Handling**: Programmatically include environment-specific settings
+- **Dynamic Generation**: Generate configurations based on external data sources
+
+#### Golang Configuration Benefits
+- **Strong Typing**: Ensure configuration correctness with Go's type system
+- **Builder Pattern**: Use the builder API for cleaner configuration construction
+- **Performance**: Generate complex configurations efficiently
+- **Direct Integration**: Access Go libraries within your configuration
+
+### Command-based Configuration
+
+Command-based configurations provide maximum flexibility by letting you generate configurations dynamically:
+
+```sh
+# Use output from any command as configuration
+nship --config="cmd:curl https://example.com/config"
+
+# Generate environment-specific configurations
+nship --config="cmd:./generate-config.sh --env=production"
+
+# Use database-driven configurations
+nship --config="cmd:python scripts/db_to_config.py"
+```
+
+This approach enables:
+- **CI/CD Integration**: Generate configurations during pipeline execution
+- **Centralized Management**: Pull configurations from central repositories
+- **Dynamic Settings**: Include real-time system information in deployments
+
+### Example Configurations
+
+#### YAML Configuration
 ```yaml
 targets:
   - name: production
@@ -91,8 +131,7 @@ jobs:
           ports: ["8080:80"]
 ```
 
-### Example Configuration (TypeScript)
-
+#### TypeScript Configuration
 ```ts
 export default {
   targets: [
@@ -111,8 +150,47 @@ export default {
 };
 ```
 
-### Example Configuration (Golang)
+#### TypeScript with Dynamic Configuration
+```ts
+// Example of dynamic configuration with TypeScript
+import * as fs from 'fs';
 
+// Load environments from external file
+const environments = JSON.parse(fs.readFileSync('./environments.json', 'utf8'));
+
+// Create reusable step patterns
+const createDeploymentSteps = (appName: string, version: string) => [
+  { run: `echo "Deploying ${appName} version ${version}..."` },
+  { copy: { local: `./${appName}/`, remote: `/var/www/${appName}/` } },
+  { docker: { 
+      image: `${appName}:${version}`, 
+      name: `${appName}-container`,
+      ports: ["8080:80"] 
+    }
+  }
+];
+
+export default {
+  targets: environments.map(env => ({
+    name: env.name,
+    host: env.host,
+    user: env.user,
+    private_key: env.keyPath
+  })),
+  jobs: [
+    {
+      name: "deploy-frontend",
+      steps: createDeploymentSteps("frontend", "1.2.3")
+    },
+    {
+      name: "deploy-backend",
+      steps: createDeploymentSteps("backend", "4.5.6")
+    }
+  ]
+};
+```
+
+#### Golang Configuration
 ```go
 package main
 
@@ -144,7 +222,7 @@ func main() {
 }
 ```
 
-### Example Configuration (TOML)
+##№# Example Configuration (TOML)
 
 ```toml
 [[targets]]

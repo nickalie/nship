@@ -5,13 +5,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/pelletier/go-toml/v2"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
+
+	"github.com/pelletier/go-toml/v2"
 
 	"github.com/evanw/esbuild/pkg/api"
 	"github.com/go-playground/validator/v10"
@@ -119,6 +120,30 @@ func execCommand(dir string, args ...string) ([]byte, error) {
 
 // Load loads and validates configuration from the specified path.
 func (l *DefaultLoader) Load(configPath string) (*Config, error) {
+	// Check if the path has "cmd:" prefix
+	if strings.HasPrefix(configPath, "cmd:") {
+		// Extract the command part (everything after "cmd:")
+		cmdStr := strings.TrimPrefix(configPath, "cmd:")
+		// Split the command into parts
+		cmdParts := strings.Fields(cmdStr)
+		if len(cmdParts) == 0 {
+			return nil, fmt.Errorf("invalid command format: %s", cmdStr)
+		}
+
+		// Use loadCmdConfig to execute the command and get the config
+		config, err := l.loadCmdConfig("./", cmdParts...)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := l.validateConfig(config); err != nil {
+			return nil, err
+		}
+
+		return config, nil
+	}
+
+	// Regular file-based loading
 	config, err := l.loadConfigByExtension(configPath)
 	if err != nil {
 		return nil, err

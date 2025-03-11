@@ -937,3 +937,175 @@ func TestInvalidJSONConfig(t *testing.T) {
 	assert.Error(t, err, "Expected parsing error but got nil")
 	assert.Contains(t, err.Error(), "failed to parse JSON", "Error message does not mention JSON parsing failure")
 }
+
+func TestLoadCmdConfig(t *testing.T) {
+	// Create a simple valid config for testing
+	validConfig := &Config{
+		Targets: []*target.Target{
+			{
+				Name:     "cmd-server",
+				Host:     "cmd.example.com",
+				User:     "cmduser",
+				Password: "cmdpass",
+			},
+		},
+		Jobs: []*job.Job{
+			{
+				Name: "cmd-job",
+				Steps: []*job.Step{
+					{Run: "echo 'Command Config'"},
+				},
+			},
+		},
+	}
+
+	// Mock valid output
+	mockOutput := mockValidOutput(validConfig)
+
+	tests := []struct {
+		name        string
+		cmdPrefix   string
+		cmdOutput   []byte
+		cmdErr      error
+		expectError bool
+	}{
+		{
+			name:        "Valid Command Config",
+			cmdPrefix:   "cmd:echo valid-config",
+			cmdOutput:   mockOutput,
+			cmdErr:      nil,
+			expectError: false,
+		},
+		{
+			name:        "Empty Command",
+			cmdPrefix:   "cmd:",
+			cmdOutput:   nil,
+			cmdErr:      nil,
+			expectError: true,
+		},
+		{
+			name:        "Command Execution Error",
+			cmdPrefix:   "cmd:invalid-command",
+			cmdOutput:   []byte("command not found"),
+			cmdErr:      fmt.Errorf("exit status 127"),
+			expectError: true,
+		},
+		{
+			name:        "Invalid JSON Output",
+			cmdPrefix:   "cmd:echo invalid-json",
+			cmdOutput:   []byte("not-valid-json\n"),
+			cmdErr:      nil,
+			expectError: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup test loader with mock command runner
+			loader := &DefaultLoader{
+				validator: validator.New(),
+				loaders:   make(map[string]func(string) (*Config, error)),
+				cmdRunner: func(dir string, args ...string) ([]byte, error) {
+					// Return our predefined output/error
+					return tt.cmdOutput, tt.cmdErr
+				},
+			}
+
+			// Try to load config with cmd: prefix
+			config, err := loader.Load(tt.cmdPrefix)
+
+			if tt.expectError {
+				assert.Error(t, err, "Expected error but got nil")
+			} else {
+				assert.NoError(t, err, "Expected no error")
+
+				// Verify config was loaded correctly
+				assert.Equal(t, validConfig.Targets[0].Host, config.Targets[0].Host, "Incorrect host")
+				assert.Equal(t, validConfig.Jobs[0].Name, config.Jobs[0].Name, "Incorrect job name")
+			}
+		})
+	}
+}
+
+func TestComplexCmdConfig(t *testing.T) {
+	// Test handling of complex command with arguments
+	validConfig := &Config{
+		Targets: []*target.Target{
+			{
+				Name:     "complex-server",
+				Host:     "complex.example.com",
+				User:     "user",
+				Password: "pass",
+			},
+		},
+		Jobs: []*job.Job{
+			{
+				Name: "complex-job",
+				Steps: []*job.Step{
+					{Run: "echo 'Complex Command'"},
+				},
+			},
+		},
+	}
+
+	// Mock command runner that validates command arguments
+	cmdRunner := func(dir string, args ...string) ([]byte, error) {
+		// Check that command arguments are correctly parsed and passed
+		if len(args) < 3 {
+			return nil, fmt.Errorf("expected at least 3 arguments, got %d", len(args))
+		}
+
+		// Verify the complex command was parsed correctly
+		if args[0] != "./script.sh" || args[1] != "--env" || args[2] != "prod" {
+			return nil, fmt.Errorf("incorrect command arguments: %v", args)
+		}
+
+		// Return valid config output
+		return mockValidOutput(validConfig), nil
+	}
+
+	loader := &DefaultLoader{
+		validator: validator.New(),
+		loaders:   make(map[string]func(string) (*Config, error)),
+		cmdRunner: cmdRunner,
+	}
+
+	// Test with complex command including arguments
+	complexCmd := "cmd:./script.sh --env prod"
+	config, err := loader.Load(complexCmd)
+
+	assert.NoError(t, err, "Expected no error for complex command")
+	assert.Equal(t, "complex-server", config.Targets[0].Name, "Incorrect target name")
+	assert.Equal(t, "complex-job", config.Jobs[0].Name, "Incorrect job name")
+}
+
+func TestCmdConfigValidation(t *testing.T) {
+	// Test that validation is properly applied to command-sourced configs
+
+	// Create an invalid config (missing required fields)
+	invalidConfig := &Config{
+		Targets: []*target.Target{
+			{
+				Name: "incomplete-target",
+				// Missing host field which should fail validation
+			},
+		},
+		Jobs: []*job.Job{},
+	}
+
+	loader := &DefaultLoader{
+		validator: validator.New(),
+		loaders:   make(map[string]func(string) (*Config, error)),
+		cmdRunner: func(dir string, args ...string) ([]byte, error) {
+			return mockValidOutput(invalidConfig), nil
+		},
+	}
+
+	// Try to load invalid config
+	_, err := loader.Load("cmd:echo invalid-config")
+
+	// Should fail validation
+	assert.Error(t, err, "Expected validation error")
+	assert.Contains(t, err.Error(), "config validation failed",
+		"Error should mention validation failure")
+}

@@ -273,8 +273,8 @@ func setupTestEnvironment(t *testing.T) (string, func()) {
 func TestCopyPath(t *testing.T) {
 	tests := []struct {
 		name        string
-		local         string
-		remote         string
+		local       string
+		remote      string
 		exclude     []string
 		isSourceDir bool
 		setupMock   func() (*MockFileSystem, *MockSFTPClient)
@@ -282,8 +282,8 @@ func TestCopyPath(t *testing.T) {
 	}{
 		{
 			name:        "copy file",
-			local:         "local/file.txt",
-			remote:         "remote/file.txt",
+			local:       "local/file.txt",
+			remote:      "remote/file.txt",
 			exclude:     nil,
 			isSourceDir: false,
 			setupMock: func() (*MockFileSystem, *MockSFTPClient) {
@@ -306,8 +306,8 @@ func TestCopyPath(t *testing.T) {
 		},
 		{
 			name:        "copy directory",
-			local:         "local",
-			remote:         "remote",
+			local:       "local",
+			remote:      "remote",
 			exclude:     nil,
 			isSourceDir: true,
 			setupMock: func() (*MockFileSystem, *MockSFTPClient) {
@@ -336,8 +336,8 @@ func TestCopyPath(t *testing.T) {
 		},
 		{
 			name:        "source not found",
-			local:         "nonexistent",
-			remote:         "remote",
+			local:       "nonexistent",
+			remote:      "remote",
 			exclude:     nil,
 			isSourceDir: false,
 			setupMock: func() (*MockFileSystem, *MockSFTPClient) {
@@ -355,8 +355,8 @@ func TestCopyPath(t *testing.T) {
 		},
 		{
 			name:        "copy directory with exclusions",
-			local:         "local",
-			remote:         "remote",
+			local:       "local",
+			remote:      "remote",
 			exclude:     []string{"*.log", "node_modules"},
 			isSourceDir: true,
 			setupMock: func() (*MockFileSystem, *MockSFTPClient) {
