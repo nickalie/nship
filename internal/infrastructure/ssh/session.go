@@ -87,12 +87,12 @@ func (c *SSHClient) executeCommand(step *job.Step, stepNum, totalSteps int) erro
 
 // executeCopy copies files to the remote host
 func (c *SSHClient) executeCopy(copyStep *job.CopyStep, stepNum, totalSteps int) error {
-	fmt.Printf("[%d/%d] Copying '%s' to '%s'...\n", stepNum, totalSteps, copyStep.Src, copyStep.Dst)
-	err := c.copier.CopyPath(copyStep.Src, copyStep.Dst, copyStep.Exclude)
+	fmt.Printf("[%d/%d] Copying '%s' to '%s'...\n", stepNum, totalSteps, copyStep.Local, copyStep.Remote)
+	err := c.copier.CopyPath(copyStep.Local, copyStep.Remote, copyStep.Exclude)
 	if err != nil {
 		return &job.CopyError{
-			Source:      copyStep.Src,
-			Destination: copyStep.Dst,
+			Source:      copyStep.Local,
+			Destination: copyStep.Remote,
 			Cause:       err,
 		}
 	}

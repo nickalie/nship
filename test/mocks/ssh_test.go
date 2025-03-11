@@ -220,19 +220,19 @@ type MockCopier struct {
 }
 
 // CopyPath mocks the fs.Copier.CopyPath method
-func (m *MockCopier) CopyPath(src, dst string, exclude []string) error {
-	args := m.Called(src, dst, exclude)
+func (m *MockCopier) CopyPath(local, remote string, exclude []string) error {
+	args := m.Called(local, remote, exclude)
 	return args.Error(0)
 }
 
 // CopyFile mocks the fs.Copier.CopyFile method
-func (m *MockCopier) CopyFile(src, dst string) error {
-	args := m.Called(src, dst)
+func (m *MockCopier) CopyFile(local, remote string) error {
+	args := m.Called(local, remote)
 	return args.Error(0)
 }
 
 // CopyDir mocks the fs.Copier.CopyDir method
-func (m *MockCopier) CopyDir(src, dst string, exclude []string) error {
-	args := m.Called(src, dst, exclude)
+func (m *MockCopier) CopyDir(local, remote string, exclude []string) error {
+	args := m.Called(local, remote, exclude)
 	return args.Error(0)
 }

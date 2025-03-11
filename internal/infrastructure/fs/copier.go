@@ -28,47 +28,47 @@ func NewCopier(fs FileSystem, client SFTPClient) *Copier {
 }
 
 // CopyPath copies a file or directory
-func (c *Copier) CopyPath(src, dst string, exclude []string) error {
-	srcInfo, err := c.fs.Stat(src)
+func (c *Copier) CopyPath(local, remote string, exclude []string) error {
+	localInfo, err := c.fs.Stat(local)
 	if err != nil {
 		return fmt.Errorf("stat source: %w", err)
 	}
 
-	if srcInfo.IsDir() {
-		return c.CopyDir(src, dst, exclude)
+	if localInfo.IsDir() {
+		return c.CopyDir(local, remote, exclude)
 	}
-	return c.CopyFile(src, dst)
+	return c.CopyFile(local, remote)
 }
 
 // CopyFile copies a single file
-func (c *Copier) CopyFile(src, dst string) error {
-	srcFile, err := c.fs.Open(src)
+func (c *Copier) CopyFile(local, remote string) error {
+	localFile, err := c.fs.Open(local)
 	if err != nil {
 		return fmt.Errorf("open source file: %w", err)
 	}
-	defer srcFile.Close()
+	defer localFile.Close()
 
-	dstDir := filepath.ToSlash(filepath.Dir(dst))
-	if err := c.client.MkdirAll(dstDir); err != nil {
+	remoteDir := filepath.ToSlash(filepath.Dir(remote))
+	if err := c.client.MkdirAll(remoteDir); err != nil {
 		return fmt.Errorf("create destination directory: %w", err)
 	}
 
-	dstFile, err := c.client.Create(dst)
+	remoteFile, err := c.client.Create(remote)
 	if err != nil {
 		return fmt.Errorf("create destination file: %w", err)
 	}
-	defer dstFile.Close()
+	defer remoteFile.Close()
 
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
+	if _, err := io.Copy(remoteFile, localFile); err != nil {
 		return fmt.Errorf("copy file content: %w", err)
 	}
 
-	srcInfo, err := c.fs.Stat(src)
+	localInfo, err := c.fs.Stat(local)
 	if err != nil {
 		return fmt.Errorf("stat source file: %w", err)
 	}
 
-	if err := c.client.Chmod(dst, srcInfo.Mode()); err != nil {
+	if err := c.client.Chmod(remote, localInfo.Mode()); err != nil {
 		return fmt.Errorf("set file permissions: %w", err)
 	}
 
@@ -76,37 +76,37 @@ func (c *Copier) CopyFile(src, dst string) error {
 }
 
 // CopyDir copies a directory recursively
-func (c *Copier) CopyDir(src, dst string, exclude []string) error {
-	if err := c.client.MkdirAll(dst); err != nil {
+func (c *Copier) CopyDir(local, remote string, exclude []string) error {
+	if err := c.client.MkdirAll(remote); err != nil {
 		return fmt.Errorf("create destination directory: %w", err)
 	}
 
-	entries, err := c.fs.ReadDir(src)
+	entries, err := c.fs.ReadDir(local)
 	if err != nil {
 		return fmt.Errorf("read source directory: %w", err)
 	}
 
-	return c.processEntries(entries, src, dst, exclude)
+	return c.processEntries(entries, local, remote, exclude)
 }
 
-func (c *Copier) processEntries(entries []os.DirEntry, src, dst string, exclude []string) error {
+func (c *Copier) processEntries(entries []os.DirEntry, local, remote string, exclude []string) error {
 	for _, entry := range entries {
-		if err := c.processEntry(entry, src, dst, exclude); err != nil {
+		if err := c.processEntry(entry, local, remote, exclude); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (c *Copier) processEntry(entry os.DirEntry, src, dst string, exclude []string) error {
-	srcPath := filepath.Join(src, entry.Name())
-	dstPath := filepath.ToSlash(filepath.Join(dst, entry.Name()))
+func (c *Copier) processEntry(entry os.DirEntry, local, remote string, exclude []string) error {
+	localPath := filepath.Join(local, entry.Name())
+	remotePath := filepath.ToSlash(filepath.Join(remote, entry.Name()))
 
-	if isExcluded(srcPath, exclude) {
+	if isExcluded(localPath, exclude) {
 		return nil
 	}
 
-	ok, err := c.shouldTransferFile(srcPath, dstPath)
+	ok, err := c.shouldTransferFile(localPath, remotePath)
 	if err != nil {
 		return fmt.Errorf("check file transfer: %w", err)
 	}
@@ -115,9 +115,9 @@ func (c *Copier) processEntry(entry os.DirEntry, src, dst string, exclude []stri
 	}
 
 	if entry.IsDir() {
-		return c.CopyDir(srcPath, dstPath, exclude)
+		return c.CopyDir(localPath, remotePath, exclude)
 	}
-	return c.CopyFile(srcPath, dstPath)
+	return c.CopyFile(localPath, remotePath)
 }
 
 func (c *Copier) shouldTransferFile(localPath, remotePath string) (bool, error) {

@@ -120,7 +120,7 @@ func TestCopyFile(t *testing.T) {
 	}
 
 	copier := NewCopier(mockFS, mockSFTP)
-	err := copier.CopyFile("src/file.txt", "dst/file.txt")
+	err := copier.CopyFile("local/file.txt", "remote/file.txt")
 
 	assert.NoError(t, err, "CopyFile should not return an error")
 	assert.True(t, fileCreated, "Destination file was not created")
@@ -131,7 +131,7 @@ func TestCopyDir(t *testing.T) {
 	mockFS := &MockFileSystem{
 		StatFunc: func(name string) (os.FileInfo, error) {
 			name = filepath.ToSlash(name)
-			if name == "src" || name == "src/subdir" {
+			if name == "local" || name == "local/subdir" {
 				return &MockFileInfo{
 					IsDirFunc: func() bool {
 						return true
@@ -147,7 +147,7 @@ func TestCopyDir(t *testing.T) {
 		ReadDirFunc: func(name string) ([]os.DirEntry, error) {
 			name = filepath.ToSlash(name)
 			switch name {
-			case "src":
+			case "local":
 				return []os.DirEntry{
 					&MockDirEntry{
 						NameFunc:  func() string { return "file1.txt" },
@@ -158,7 +158,7 @@ func TestCopyDir(t *testing.T) {
 						IsDirFunc: func() bool { return true },
 					},
 				}, nil
-			case "src/subdir":
+			case "local/subdir":
 				return []os.DirEntry{
 					&MockDirEntry{
 						NameFunc:  func() string { return "file2.txt" },
@@ -195,18 +195,18 @@ func TestCopyDir(t *testing.T) {
 	}
 
 	copier := NewCopier(mockFS, mockSFTP)
-	err := copier.CopyDir("src", "dst", nil)
+	err := copier.CopyDir("local", "remote", nil)
 
 	assert.NoError(t, err, "CopyDir should not return an error")
 
 	// Check directories were created
-	expectedDirs := []string{"dst", "dst/subdir"}
+	expectedDirs := []string{"remote", "remote/subdir"}
 	for _, dir := range expectedDirs {
 		assert.True(t, createdDirs[dir], "Directory not created: %s", dir)
 	}
 
 	// Check files were created
-	expectedFiles := []string{"dst/file1.txt", "dst/subdir/file2.txt"}
+	expectedFiles := []string{"remote/file1.txt", "remote/subdir/file2.txt"}
 	for _, file := range expectedFiles {
 		assert.True(t, createdFiles[file], "File not created: %s", file)
 	}
@@ -273,8 +273,8 @@ func setupTestEnvironment(t *testing.T) (string, func()) {
 func TestCopyPath(t *testing.T) {
 	tests := []struct {
 		name        string
-		src         string
-		dst         string
+		local         string
+		remote         string
 		exclude     []string
 		isSourceDir bool
 		setupMock   func() (*MockFileSystem, *MockSFTPClient)
@@ -282,8 +282,8 @@ func TestCopyPath(t *testing.T) {
 	}{
 		{
 			name:        "copy file",
-			src:         "src/file.txt",
-			dst:         "dst/file.txt",
+			local:         "local/file.txt",
+			remote:         "remote/file.txt",
 			exclude:     nil,
 			isSourceDir: false,
 			setupMock: func() (*MockFileSystem, *MockSFTPClient) {
@@ -306,8 +306,8 @@ func TestCopyPath(t *testing.T) {
 		},
 		{
 			name:        "copy directory",
-			src:         "src",
-			dst:         "dst",
+			local:         "local",
+			remote:         "remote",
 			exclude:     nil,
 			isSourceDir: true,
 			setupMock: func() (*MockFileSystem, *MockSFTPClient) {
@@ -336,8 +336,8 @@ func TestCopyPath(t *testing.T) {
 		},
 		{
 			name:        "source not found",
-			src:         "nonexistent",
-			dst:         "dst",
+			local:         "nonexistent",
+			remote:         "remote",
 			exclude:     nil,
 			isSourceDir: false,
 			setupMock: func() (*MockFileSystem, *MockSFTPClient) {
@@ -355,8 +355,8 @@ func TestCopyPath(t *testing.T) {
 		},
 		{
 			name:        "copy directory with exclusions",
-			src:         "src",
-			dst:         "dst",
+			local:         "local",
+			remote:         "remote",
 			exclude:     []string{"*.log", "node_modules"},
 			isSourceDir: true,
 			setupMock: func() (*MockFileSystem, *MockSFTPClient) {
@@ -366,7 +366,7 @@ func TestCopyPath(t *testing.T) {
 						baseName := filepath.Base(name)
 
 						// Explicitly handle paths we know about
-						if name == "src" {
+						if name == "local" {
 							return &MockFileInfo{
 								IsDirFunc: func() bool { return true },
 							}, nil
@@ -393,9 +393,9 @@ func TestCopyPath(t *testing.T) {
 						}, nil
 					},
 					ReadDirFunc: func(name string) ([]os.DirEntry, error) {
-						// Only return entries for the root src directory
+						// Only return entries for the root local directory
 						// to prevent recursive scanning
-						if name == "src" {
+						if name == "local" {
 							return []os.DirEntry{
 								&MockDirEntry{
 									NameFunc:  func() string { return "file.txt" },
@@ -467,7 +467,7 @@ func TestCopyPath(t *testing.T) {
 			mockFS, mockSFTP := tt.setupMock()
 			copier := NewCopier(mockFS, mockSFTP)
 
-			err := copier.CopyPath(tt.src, tt.dst, tt.exclude)
+			err := copier.CopyPath(tt.local, tt.remote, tt.exclude)
 
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -585,7 +585,7 @@ func TestProcessEntry(t *testing.T) {
 		}
 
 		// Use a proper exclude pattern that will match test.log
-		err := copier.processEntry(entry, "src", "dst", []string{"*.log"})
+		err := copier.processEntry(entry, "local", "remote", []string{"*.log"})
 
 		assert.NoError(t, err)
 	})
@@ -614,7 +614,7 @@ func TestProcessEntry(t *testing.T) {
 			IsDirFunc: func() bool { return true },
 		}
 
-		err := copier.processEntry(entry, "src", "dst", nil)
+		err := copier.processEntry(entry, "local", "remote", nil)
 
 		assert.NoError(t, err)
 	})
@@ -652,7 +652,7 @@ func TestProcessEntry(t *testing.T) {
 			IsDirFunc: func() bool { return false },
 		}
 
-		err := copier.processEntry(entry, "src", "dst", nil)
+		err := copier.processEntry(entry, "local", "remote", nil)
 
 		assert.NoError(t, err)
 	})

@@ -106,7 +106,7 @@ func (h *StepHasher) computeCopyStepHash(step *Step, tgt *target.Target, fs File
 	hasher.Write(stepData)
 
 	// Get source info
-	srcInfo, err := fs.Stat(copyStep.Src)
+	localInfo, err := fs.Stat(copyStep.Local)
 	if err != nil {
 		if os.IsNotExist(err) {
 			// If source doesn't exist, just use the step config
@@ -117,14 +117,14 @@ func (h *StepHasher) computeCopyStepHash(step *Step, tgt *target.Target, fs File
 	}
 
 	// If source is a directory, process all files in it
-	if srcInfo.IsDir() {
-		err = h.hashDirectory(copyStep.Src, copyStep.Exclude, fs, hasher)
+	if localInfo.IsDir() {
+		err = h.hashDirectory(copyStep.Local, copyStep.Exclude, fs, hasher)
 		if err != nil {
 			return "", fmt.Errorf("failed to hash directory: %w", err)
 		}
 	} else {
 		// For a single file, add its modification time and size
-		fileData := fmt.Sprintf("%s:%d", srcInfo.ModTime().String(), srcInfo.Size())
+		fileData := fmt.Sprintf("%s:%d", localInfo.ModTime().String(), localInfo.Size())
 		hasher.Write([]byte(fileData))
 	}
 

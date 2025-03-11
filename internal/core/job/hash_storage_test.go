@@ -122,7 +122,7 @@ func (m *MockDirEntryForHashing) Info() (os.FileInfo, error) {
 func createMockFilesystem(isDir bool, modTime time.Time, fileSize int64, fileEntries []string) *MockFileSystemForHashing {
 	return &MockFileSystemForHashing{
 		StatFunc: func(name string) (os.FileInfo, error) {
-			if isDir && name == "src" {
+			if isDir && name == "local" {
 				return &MockFileInfoForHashing{
 					IsDirFunc: func() bool { return true },
 				}, nil
@@ -206,7 +206,7 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 	// Test steps with different types
 	t.Run("different step types have different hashes", func(t *testing.T) {
 		runStep := &Step{Run: "echo hello"}
-		copyStep := &Step{Copy: &CopyStep{Src: "src", Dst: "dst"}}
+		copyStep := &Step{Copy: &CopyStep{Local: "local", Remote: "remote"}}
 		dockerStep := &Step{Docker: &DockerStep{Image: "nginx", Name: "web"}}
 
 		hashRun, err := hasher.ComputeHash(runStep, testTarget, nilFS)
@@ -275,8 +275,8 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		mockFS := createMockFilesystem(false, fixedTime, 100, nil)
 
 		// Create two identical copy steps
-		copyStep1 := &Step{Copy: &CopyStep{Src: "src/file.txt", Dst: "dst/file.txt"}}
-		copyStep2 := &Step{Copy: &CopyStep{Src: "src/file.txt", Dst: "dst/file.txt"}}
+		copyStep1 := &Step{Copy: &CopyStep{Local: "local/file.txt", Remote: "remote/file.txt"}}
+		copyStep2 := &Step{Copy: &CopyStep{Local: "local/file.txt", Remote: "remote/file.txt"}}
 
 		// Compute hashes
 		hash1, err := hasher.ComputeHash(copyStep1, testTarget, mockFS)
@@ -307,7 +307,7 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		mockFS := createMockFilesystem(true, fixedTime, 100, []string{"file1.txt", "file2.txt"})
 
 		// Create a copy step for a directory
-		dirCopyStep := &Step{Copy: &CopyStep{Src: "src", Dst: "dst"}}
+		dirCopyStep := &Step{Copy: &CopyStep{Local: "local", Remote: "remote"}}
 
 		// Compute hash
 		hash1, err := hasher.ComputeHash(dirCopyStep, testTarget, mockFS)

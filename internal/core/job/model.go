@@ -30,8 +30,8 @@ type DockerStep struct {
 
 // CopyStep defines source and destination paths for file copy operations.
 type CopyStep struct {
-	Src     string   `yaml:"src" json:"src" toml:"src" validate:"required"`
-	Dst     string   `yaml:"dst" json:"dst" toml:"dst" validate:"required"`
+	Local   string   `yaml:"local" json:"local" toml:"local" validate:"required"`
+	Remote  string   `yaml:"remote" json:"remote" toml:"remote" validate:"required"`
 	Exclude []string `yaml:"exclude,omitempty" json:"exclude,omitempty" toml:"exclude,omitempty" validate:"omitempty,dive,required"`
 }
 

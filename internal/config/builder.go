@@ -59,11 +59,11 @@ func (b *Builder) AddRunStep(command string) *Builder {
 
 // AddCopyStep creates and adds a new file copy step with the specified
 // source and destination paths. Returns the builder for method chaining.
-func (b *Builder) AddCopyStep(src, dst string) *Builder {
+func (b *Builder) AddCopyStep(local, remote string) *Builder {
 	step := &job.Step{
 		Copy: &job.CopyStep{
-			Src: src,
-			Dst: dst,
+			Local:  local,
+			Remote: remote,
 		},
 	}
 	return b.AddStep(step)

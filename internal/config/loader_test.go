@@ -50,8 +50,8 @@ jobs:
   - name: deploy
     steps:
       - copy:
-          src: ./config/nginx.conf
-          dst: /etc/nginx/nginx.conf
+          local: ./config/nginx.conf
+          remote: /etc/nginx/nginx.conf
       - docker:
           image: nginx:latest
           name: web
@@ -95,7 +95,7 @@ jobs:
 	// Copy step
 	copyStep := config.Jobs[1].Steps[0].Copy
 	assert.NotNil(t, copyStep, "Expected first step to be a copy step, but Copy is nil")
-	assert.Equal(t, "./config/nginx.conf", copyStep.Src, "Incorrect copy step source")
+	assert.Equal(t, "./config/nginx.conf", copyStep.Local, "Incorrect copy step source")
 
 	// Docker step
 	dockerStep := config.Jobs[1].Steps[1].Docker
@@ -750,7 +750,7 @@ func TestLoadConfigFormats(t *testing.T) {
        {
         "name": "deploy",
         "steps": [
-         {"copy": {"src": "./config/nginx.conf", "dst": "/etc/nginx/nginx.conf"}},
+         {"copy": {"local": "./config/nginx.conf", "remote": "/etc/nginx/nginx.conf"}},
          {"docker": {"image": "nginx:latest", "name": "web"}}
         ]
        }
@@ -782,7 +782,7 @@ steps = [
 [[jobs]]
 name = "deploy"
 steps = [
-  { copy = { src = "./config/nginx.conf", dst = "/etc/nginx/nginx.conf" } },
+  { copy = { local = "./config/nginx.conf", remote = "/etc/nginx/nginx.conf" } },
   { docker = { image = "nginx:latest", name = "web", ports = ["80:80"] } }
 ]
 `

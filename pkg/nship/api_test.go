@@ -38,7 +38,7 @@ func TestBuilderFunctions(t *testing.T) {
 	builder.AddRunStep("echo hello")
 
 	// Create a copy step
-	builder.AddCopyStep("src", "dst")
+	builder.AddCopyStep("local", "remote")
 
 	// Create a docker step
 	docker := &DockerStep{
@@ -66,8 +66,8 @@ func TestBuilderFunctions(t *testing.T) {
 
 	// Verify copy step
 	assert.NotNil(t, cfg.Jobs[0].Steps[1].Copy, "Copy step was not correctly added")
-	assert.Equal(t, "src", cfg.Jobs[0].Steps[1].Copy.Src, "Copy step source was not correctly set")
-	assert.Equal(t, "dst", cfg.Jobs[0].Steps[1].Copy.Dst, "Copy step destination was not correctly set")
+	assert.Equal(t, "local", cfg.Jobs[0].Steps[1].Copy.Local, "Copy step source was not correctly set")
+	assert.Equal(t, "remote", cfg.Jobs[0].Steps[1].Copy.Remote, "Copy step destination was not correctly set")
 
 	// Verify docker step
 	assert.NotNil(t, cfg.Jobs[0].Steps[2].Docker, "Docker step was not correctly added")
@@ -83,7 +83,7 @@ func TestTypeAliases(t *testing.T) {
 	apiJob := &Job{Name: "test-job", Steps: []*Step{{Run: "echo test"}}}
 	apiStep := &Step{Run: "echo test"}
 	apiDockerStep := &DockerStep{Image: "nginx", Name: "web"}
-	apiCopyStep := &CopyStep{Src: "src", Dst: "dst"}
+	apiCopyStep := &CopyStep{Local: "local", Remote: "remote"}
 	apiConfig := &Config{
 		Targets: []*Target{apiTarget},
 		Jobs:    []*Job{apiJob},

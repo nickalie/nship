@@ -86,11 +86,11 @@ func TestBuilder(t *testing.T) {
 	if copyStep == nil {
 		t.Fatalf("Expected first step to be a copy step, but Copy is nil")
 	}
-	if copyStep.Src != "./config/nginx.conf" {
-		t.Errorf("Expected copy step source to be './config/nginx.conf', got %s", copyStep.Src)
+	if copyStep.Local != "./config/nginx.conf" {
+		t.Errorf("Expected copy step source to be './config/nginx.conf', got %s", copyStep.Local)
 	}
-	if copyStep.Dst != "/etc/nginx/nginx.conf" {
-		t.Errorf("Expected copy step destination to be '/etc/nginx/nginx.conf', got %s", copyStep.Dst)
+	if copyStep.Remote != "/etc/nginx/nginx.conf" {
+		t.Errorf("Expected copy step destination to be '/etc/nginx/nginx.conf', got %s", copyStep.Remote)
 	}
 
 	// Verify docker step

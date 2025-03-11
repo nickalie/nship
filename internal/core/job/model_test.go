@@ -52,8 +52,8 @@ func TestGetType(t *testing.T) {
 			name: "copy step",
 			step: Step{
 				Copy: &CopyStep{
-					Src: "source.txt",
-					Dst: "dest.txt",
+					Local:  "source.txt",
+					Remote: "dest.txt",
 				},
 			},
 			expectedType: CopyStepType,
