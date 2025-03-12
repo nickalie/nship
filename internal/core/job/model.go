@@ -11,13 +11,13 @@ type Job struct {
 type Step struct {
 	Run    string      `yaml:"run,omitempty" json:"run,omitempty" toml:"run,omitempty" validate:"required_without_all=Copy Shell Docker"`
 	Copy   *CopyStep   `yaml:"copy,omitempty" json:"copy,omitempty" toml:"copy,omitempty" validate:"required_without_all=Run Shell Docker"`
-	Shell  string      `yaml:"shell,omitempty" json:"shell,omitempty" toml:"shell,omitempty"`
+	Shell  string      `yaml:"shell,omitempty" json:"shell,omitempty" toml:"shell,omitempty" validate:"omitempty"`
 	Docker *DockerStep `yaml:"docker,omitempty" json:"docker,omitempty" toml:"docker,omitempty" validate:"required_without_all=Run Copy Shell"`
 }
 
 // DockerBuildStep defines Docker build configuration parameters.
 type DockerBuildStep struct {
-	Context string            `yaml:"context" json:"context" toml:"context" validate:"required"`
+	Context string            `yaml:"context" json:"context" toml:"context" validate:"required,dirpath"`
 	Args    map[string]string `yaml:"args,omitempty" json:"args,omitempty" toml:"args,omitempty" validate:"omitempty"`
 }
 
