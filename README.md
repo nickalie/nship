@@ -131,6 +131,49 @@ jobs:
           ports: ["8080:80"]
 ```
 
+#### JSON Configuration
+```json
+{
+  "targets": [
+    {
+      "name": "production",
+      "host": "prod.example.com",
+      "user": "deploy",
+      "private_key": "~/.ssh/id_rsa"
+    }
+  ],
+  "jobs": [
+    {
+      "name": "deploy-app",
+      "steps": [
+        {
+          "run": "echo \"Deploying application...\""
+        },
+        {
+          "copy": {
+            "local": "./app/",
+            "remote": "/var/www/app/"
+          }
+        },
+        {
+          "docker": {
+            "image": "myapp:latest",
+            "name": "myapp-container",
+            "ports": ["8080:80"],
+            "build": {
+              "context": "./app",
+              "args": {
+                "VERSION": "1.0.0"
+              }
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
+```
+
 #### TypeScript Configuration
 ```ts
 export default {
@@ -222,7 +265,7 @@ func main() {
 }
 ```
 
-##№# Example Configuration (TOML)
+#### Example Configuration (TOML)
 
 ```toml
 [[targets]]
@@ -293,6 +336,11 @@ Runs a Docker container on the target. If the container already exists, it will 
     restart: "always"
     commands:
       - "npm start"
+    build:
+      context: ./path/to/directory/with/dockerfile
+      args:
+        VERSION: "1.0.0"
+        DEBUG: "true"
 ```
 
 #### Supported Keys in Docker Step
@@ -306,6 +354,9 @@ Runs a Docker container on the target. If the container already exists, it will 
 - `networks` (list of strings, optional): List of network names to connect the container.
 - `restart` (string, optional): Restart policy (`no`, `on-failure`, `always`, `unless-stopped`).
 - `commands` (list of strings, optional): List of commands to run inside the container.
+- `build` (object, optional): Configuration for building the Docker image before running the container.
+  - `context` (string, required): Build context path where the Dockerfile is located.
+  - `args` (map of key-value pairs, optional): Build arguments to pass to the Docker build command.
 
 ## Vault Support
 

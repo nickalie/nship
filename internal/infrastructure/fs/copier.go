@@ -55,7 +55,7 @@ func (c *Copier) CopyFile(local, remote string) error {
 
 	remoteFile, err := c.client.Create(remote)
 	if err != nil {
-		return fmt.Errorf("create destination file: %w", err)
+		return fmt.Errorf("create destination file: %s, %w", remote, err)
 	}
 	defer remoteFile.Close()
 
@@ -143,9 +143,11 @@ func (c *Copier) shouldTransferFile(localPath, remotePath string) (bool, error) 
 // isExcluded checks if a path matches any exclude pattern
 func isExcluded(path string, exclude []string) bool {
 	for _, pattern := range exclude {
-		if matched, _ := filepath.Match(pattern, path); matched {
+		if matched, _ := filepath.Match(pattern, filepath.ToSlash(path)); matched {
 			return true
 		}
 	}
+
+	fmt.Println("not excluded", path, exclude)
 	return false
 }

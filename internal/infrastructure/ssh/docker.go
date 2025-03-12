@@ -23,6 +23,12 @@ func NewDockerCommandBuilder(docker *job.DockerStep) *DockerCommandBuilder {
 func (b *DockerCommandBuilder) BuildCommands() []string {
 	commands := make([]string, 0)
 
+	// Build image if build specification is provided
+	if b.docker.Build != nil {
+		buildCmd := b.buildDockerBuildCommand()
+		commands = append(commands, buildCmd)
+	}
+
 	// Remove existing container if any
 	if b.docker.Name != "" {
 		commands = append(commands, fmt.Sprintf("docker rm -f %s 2>/dev/null || true", b.docker.Name))
@@ -45,6 +51,39 @@ func (b *DockerCommandBuilder) BuildCommands() []string {
 	commands = append(commands, fmt.Sprintf("docker start %s", b.docker.Name))
 
 	return commands
+}
+
+// buildDockerBuildCommand builds a docker build command
+func (b *DockerCommandBuilder) buildDockerBuildCommand() string {
+	args := []string{"docker build"}
+
+	// Add tag for the image
+	args = append(args, "-t", b.docker.Image)
+
+	// Add build arguments
+	args = append(args, b.appendDockerBuildArgs("--build-arg", b.docker.Build.Args)...)
+
+	// Add build context
+	args = append(args, b.docker.Build.Context)
+
+	return strings.Join(args, " ")
+}
+
+// appendDockerBuildArgs appends Docker build arguments
+func (b *DockerCommandBuilder) appendDockerBuildArgs(flag string, args map[string]string) []string {
+	buildArgs := make([]string, 0, len(args)*2)
+
+	// Get keys and sort them for consistent order
+	keys := make([]string, 0, len(args))
+	for k := range args {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	for _, k := range keys {
+		buildArgs = append(buildArgs, flag, fmt.Sprintf("%s=%s", k, args[k]))
+	}
+	return buildArgs
 }
 
 // buildDockerCreateCommand builds a docker create command

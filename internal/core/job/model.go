@@ -15,10 +15,17 @@ type Step struct {
 	Docker *DockerStep `yaml:"docker,omitempty" json:"docker,omitempty" toml:"docker,omitempty" validate:"required_without_all=Run Copy Shell"`
 }
 
+// DockerBuildStep defines Docker build configuration parameters.
+type DockerBuildStep struct {
+	Context string            `yaml:"context" json:"context" toml:"context" validate:"required"`
+	Args    map[string]string `yaml:"args,omitempty" json:"args,omitempty" toml:"args,omitempty" validate:"omitempty"`
+}
+
 // DockerStep defines Docker container configuration and execution parameters.
 type DockerStep struct {
 	Image       string            `yaml:"image" json:"image" toml:"image" validate:"required"`
 	Name        string            `yaml:"name" json:"name" toml:"name" validate:"required"`
+	Build       *DockerBuildStep  `yaml:"build,omitempty" json:"build,omitempty" toml:"build,omitempty" validate:"omitempty"`
 	Environment map[string]string `yaml:"environment" json:"environment" toml:"environment" validate:"omitempty"`
 	Ports       []string          `yaml:"ports" json:"ports" toml:"ports" validate:"omitempty,dive,required"`
 	Volumes     []string          `yaml:"volumes" json:"volumes" toml:"volumes" validate:"omitempty,dive,required"`

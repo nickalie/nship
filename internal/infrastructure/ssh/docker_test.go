@@ -118,6 +118,46 @@ func TestDockerCommandBuilder_BuildCommands(t *testing.T) {
 				"-l traefik.http.services.app.loadbalancer.server.port",
 			},
 		},
+		{
+			name: "docker with build configuration",
+			dockerStep: &job.DockerStep{
+				Image: "myapp:latest",
+				Name:  "custom-app",
+				Build: &job.DockerBuildStep{
+					Context: "./app",
+					Args: map[string]string{
+						"VERSION": "1.0.0",
+						"ENV":     "production",
+					},
+				},
+			},
+			expectedCmds: []string{
+				"docker build -t myapp:latest",
+				"--build-arg ENV=production",
+				"--build-arg VERSION=1.0.0",
+				"./app",
+				"docker rm -f custom-app",
+				"docker create --name custom-app",
+				"myapp:latest",
+				"docker start custom-app",
+			},
+		},
+		{
+			name: "docker with build context only",
+			dockerStep: &job.DockerStep{
+				Image: "simple-app:dev",
+				Name:  "simple",
+				Build: &job.DockerBuildStep{
+					Context: ".",
+				},
+			},
+			expectedCmds: []string{
+				"docker build -t simple-app:dev .",
+				"docker rm -f simple",
+				"docker create --name simple simple-app:dev",
+				"docker start simple",
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -233,6 +273,63 @@ func TestBuildDockerCreateCommand(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			builder := NewDockerCommandBuilder(tt.dockerStep)
 			cmd := builder.buildDockerCreateCommand()
+
+			// Check that all expected parts are in the command
+			for _, expected := range tt.expectedParts {
+				assert.Contains(t, cmd, expected, "Command should contain '%s'", expected)
+			}
+
+			// Check that unexpected parts are not in the command
+			for _, unexpected := range tt.unexpected {
+				assert.NotContains(t, cmd, unexpected, "Command should not contain '%s'", unexpected)
+			}
+		})
+	}
+}
+
+func TestBuildDockerBuildCommand(t *testing.T) {
+	tests := []struct {
+		name          string
+		dockerStep    *job.DockerStep
+		expectedParts []string
+		unexpected    []string
+	}{
+		{
+			name: "basic build command",
+			dockerStep: &job.DockerStep{
+				Image: "app:v1",
+				Build: &job.DockerBuildStep{
+					Context: "./src",
+				},
+			},
+			expectedParts: []string{"docker build", "-t app:v1", "./src"},
+		},
+		{
+			name: "build with args",
+			dockerStep: &job.DockerStep{
+				Image: "web:latest",
+				Build: &job.DockerBuildStep{
+					Context: "/path/to/code",
+					Args: map[string]string{
+						"NODE_ENV": "production",
+						"API_URL":  "https://api.example.com",
+					},
+				},
+			},
+			expectedParts: []string{
+				"docker build",
+				"-t web:latest",
+				"--build-arg API_URL=https://api.example.com",
+				"--build-arg NODE_ENV=production",
+				"/path/to/code",
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			builder := NewDockerCommandBuilder(tt.dockerStep)
+			cmd := builder.buildDockerBuildCommand()
 
 			// Check that all expected parts are in the command
 			for _, expected := range tt.expectedParts {
