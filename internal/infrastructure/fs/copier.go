@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/nickalie/nship/internal/util"
 )
 
 // SFTPClient abstracts SFTP operations
@@ -102,7 +104,8 @@ func (c *Copier) processEntry(entry os.DirEntry, local, remote string, exclude [
 	localPath := filepath.Join(local, entry.Name())
 	remotePath := filepath.ToSlash(filepath.Join(remote, entry.Name()))
 
-	if isExcluded(localPath, exclude) {
+	// Use the utility package's IsExcluded function
+	if util.IsExcluded(localPath, entry.Name(), exclude) {
 		return nil
 	}
 
@@ -138,16 +141,4 @@ func (c *Copier) shouldTransferFile(localPath, remotePath string) (bool, error) 
 	}
 
 	return localInfo.Size() != remoteInfo.Size(), nil
-}
-
-// isExcluded checks if a path matches any exclude pattern
-func isExcluded(path string, exclude []string) bool {
-	for _, pattern := range exclude {
-		if matched, _ := filepath.Match(pattern, filepath.ToSlash(path)); matched {
-			return true
-		}
-	}
-
-	fmt.Println("not excluded", path, exclude)
-	return false
 }

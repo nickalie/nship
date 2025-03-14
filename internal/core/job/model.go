@@ -17,7 +17,7 @@ type Step struct {
 
 // DockerBuildStep defines Docker build configuration parameters.
 type DockerBuildStep struct {
-	Context string            `yaml:"context" json:"context" toml:"context" validate:"required,dirpath"`
+	Context string            `yaml:"context" json:"context" toml:"context" validate:"required"`
 	Args    map[string]string `yaml:"args,omitempty" json:"args,omitempty" toml:"args,omitempty" validate:"omitempty"`
 }
 

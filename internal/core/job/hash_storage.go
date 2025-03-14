@@ -12,6 +12,7 @@ import (
 	"sort"
 
 	"github.com/nickalie/nship/internal/core/target"
+	"github.com/nickalie/nship/internal/util"
 )
 
 // HashStorage defines an interface for storing and retrieving step hashes
@@ -88,8 +89,22 @@ func (h *StepHasher) computeCopyStepHash(step *Step, tgt *target.Target, fs File
 		Target *target.Target `json:"target"`
 	}
 
+	// Make a deep copy of the step to ensure we don't modify the original
+	stepCopy := *step
+	copyStepcopy := *copyStep
+
+	// Sort exclude patterns if they exist to ensure consistent hash regardless of order
+	if len(copyStepcopy.Exclude) > 0 {
+		sortedExcludes := make([]string, len(copyStepcopy.Exclude))
+		copy(sortedExcludes, copyStepcopy.Exclude)
+		sort.Strings(sortedExcludes)
+		copyStepcopy.Exclude = sortedExcludes
+	}
+
+	stepCopy.Copy = &copyStepcopy
+
 	combined := combinedData{
-		Step:   step,
+		Step:   &stepCopy,
 		Target: tgt,
 	}
 
@@ -102,7 +117,7 @@ func (h *StepHasher) computeCopyStepHash(step *Step, tgt *target.Target, fs File
 	// Create a hasher that we'll update with all the relevant data
 	hasher := sha256.New()
 
-	// Add the step configuration
+	// Add the step configuration (now with sorted exclude patterns)
 	hasher.Write(stepData)
 
 	// Get source info
@@ -123,9 +138,9 @@ func (h *StepHasher) computeCopyStepHash(step *Step, tgt *target.Target, fs File
 			return "", fmt.Errorf("failed to hash directory: %w", err)
 		}
 	} else {
-		// For a single file, add its modification time and size
-		fileData := fmt.Sprintf("%s:%d", localInfo.ModTime().String(), localInfo.Size())
-		hasher.Write([]byte(fileData))
+		// For a single file, add its path, modification time, size and mode to the hash
+		// using the same function used for directory entries for consistency
+		addFileInfoToHash(copyStep.Local, localInfo, hasher)
 	}
 
 	// Return the final hash
@@ -133,8 +148,8 @@ func (h *StepHasher) computeCopyStepHash(step *Step, tgt *target.Target, fs File
 }
 
 // hashDirectory recursively hashes a directory's structure and file metadata
-func (h *StepHasher) hashDirectory(dir string, exclude []string, fs FileSystemInterface, hasher hash.Hash) error {
-	entries, err := fs.ReadDir(dir)
+func (h *StepHasher) hashDirectory(dir string, exclude []string, fileSystem FileSystemInterface, hasher hash.Hash) error {
+	entries, err := fileSystem.ReadDir(dir)
 	if err != nil {
 		return fmt.Errorf("failed to read directory %s: %w", dir, err)
 	}
@@ -144,11 +159,12 @@ func (h *StepHasher) hashDirectory(dir string, exclude []string, fs FileSystemIn
 	for _, name := range entryNames {
 		path := filepath.Join(dir, name)
 
-		if isExcluded(path, name, exclude) {
+		// Use the utility package's IsExcluded function
+		if util.IsExcluded(path, name, exclude) {
 			continue
 		}
 
-		info, err := fs.Stat(path)
+		info, err := fileSystem.Stat(path)
 		if err != nil {
 			return fmt.Errorf("failed to stat %s: %w", path, err)
 		}
@@ -156,7 +172,7 @@ func (h *StepHasher) hashDirectory(dir string, exclude []string, fs FileSystemIn
 		addFileInfoToHash(path, info, hasher)
 
 		if info.IsDir() {
-			if err := h.hashDirectory(path, exclude, fs, hasher); err != nil {
+			if err := h.hashDirectory(path, exclude, fileSystem, hasher); err != nil {
 				return err
 			}
 		}
@@ -174,17 +190,7 @@ func getSortedEntryNames(entries []os.DirEntry) []string {
 	return entryNames
 }
 
-func isExcluded(path, name string, exclude []string) bool {
-	for _, pattern := range exclude {
-		if matched, _ := filepath.Match(pattern, path); matched {
-			return true
-		}
-		if matched, _ := filepath.Match(pattern, name); matched {
-			return true
-		}
-	}
-	return false
-}
+// Remove the local isExcluded function as we're now using the unified version from fs package
 
 func addFileInfoToHash(path string, info os.FileInfo, hasher hash.Hash) {
 	fileData := fmt.Sprintf("%s:%s:%d:%d", path, info.ModTime().String(), info.Size(), info.Mode())

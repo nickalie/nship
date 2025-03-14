@@ -323,4 +323,48 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		// Hashes should be different
 		assert.NotEqual(t, hash1, hash2, "Copy steps with different directory content should have different hashes")
 	})
+
+	// Test exclude patterns affect the hash
+	t.Run("exclude patterns affect hash for CopyStep", func(t *testing.T) {
+		fixedTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+
+		// Create a mock filesystem
+		mockFS := createMockFilesystem(true, fixedTime, 100, []string{"file1.txt", "file2.txt"})
+
+		// Create two copy steps with different exclude patterns
+		copyStep1 := &Step{Copy: &CopyStep{
+			Local:   "local",
+			Remote:  "remote",
+			Exclude: []string{"*.log"},
+		}}
+
+		copyStep2 := &Step{Copy: &CopyStep{
+			Local:   "local",
+			Remote:  "remote",
+			Exclude: []string{"*.log", "*.tmp"},
+		}}
+
+		// Compute hashes
+		hash1, err := hasher.ComputeHash(copyStep1, testTarget, mockFS)
+		assert.NoError(t, err, "Failed to compute hash for copyStep1")
+
+		hash2, err := hasher.ComputeHash(copyStep2, testTarget, mockFS)
+		assert.NoError(t, err, "Failed to compute hash for copyStep2")
+
+		// Hashes should be different despite same files because exclude patterns differ
+		assert.NotEqual(t, hash1, hash2, "Copy steps with different exclude patterns should have different hashes")
+
+		// Create a copy step with same patterns but different order
+		copyStep3 := &Step{Copy: &CopyStep{
+			Local:   "local",
+			Remote:  "remote",
+			Exclude: []string{"*.tmp", "*.log"}, // Same patterns as copyStep2 but different order
+		}}
+
+		hash3, err := hasher.ComputeHash(copyStep3, testTarget, mockFS)
+		assert.NoError(t, err, "Failed to compute hash for copyStep3")
+
+		// Hashes should be the same despite pattern order difference
+		assert.Equal(t, hash2, hash3, "Copy steps with same exclude patterns in different order should have same hash")
+	})
 }

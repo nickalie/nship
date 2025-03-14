@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/nickalie/nship/internal/util"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -212,7 +213,8 @@ func TestCopyDir(t *testing.T) {
 	}
 }
 
-func TestIsExcluded(t *testing.T) {
+func TestExcludePatterns(t *testing.T) {
+	// Renamed test to avoid duplicate TestIsExcluded
 	tests := []struct {
 		name     string
 		path     string
@@ -253,8 +255,9 @@ func TestIsExcluded(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := isExcluded(tt.path, tt.exclude)
-			assert.Equal(t, tt.expected, result, "isExcluded() returned unexpected result")
+			// Use util.IsExcluded instead of isExcluded
+			result := util.IsExcluded(tt.path, filepath.Base(tt.path), tt.exclude)
+			assert.Equal(t, tt.expected, result, "IsExcluded() returned unexpected result")
 		})
 	}
 }

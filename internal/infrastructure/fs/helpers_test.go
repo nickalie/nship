@@ -148,4 +148,4 @@ func (m *MockDirEntry) Info() (os.FileInfo, error) {
 	return &MockFileInfo{}, nil
 }
 
-// MockSFTPClient implements SFTPClient for testing
+// Note: TestIsExcluded has been moved to internal/util/fs_test.go
