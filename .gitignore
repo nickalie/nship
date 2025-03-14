@@ -5,3 +5,4 @@ bin
 cmd/testdata
 coverage
 dist
+temp
