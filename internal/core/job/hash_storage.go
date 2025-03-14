@@ -76,24 +76,17 @@ func (h *StepHasher) ComputeHash(step *Step, tgt *target.Target, fs FileSystemIn
 	return hex.EncodeToString(hashSum[:]), nil
 }
 
-// computeCopyStepHash generates a hash for a CopyStep that includes source file information
-func (h *StepHasher) computeCopyStepHash(step *Step, tgt *target.Target, fs FileSystemInterface) (string, error) {
-	copyStep := step.Copy
-	if copyStep == nil {
-		return "", fmt.Errorf("nil CopyStep")
-	}
-
-	// Create a combined structure with step and target info
-	type combinedData struct {
-		Step   *Step          `json:"step"`
-		Target *target.Target `json:"target"`
+// prepareStepData creates a copy of step data with sorted exclude patterns
+func (h *StepHasher) prepareStepData(step *Step, tgt *target.Target) ([]byte, error) {
+	if step.Copy == nil {
+		return nil, fmt.Errorf("nil CopyStep")
 	}
 
 	// Make a deep copy of the step to ensure we don't modify the original
 	stepCopy := *step
-	copyStepcopy := *copyStep
+	copyStepcopy := *step.Copy
 
-	// Sort exclude patterns if they exist to ensure consistent hash regardless of order
+	// Sort exclude patterns if they exist
 	if len(copyStepcopy.Exclude) > 0 {
 		sortedExcludes := make([]string, len(copyStepcopy.Exclude))
 		copy(sortedExcludes, copyStepcopy.Exclude)
@@ -102,48 +95,52 @@ func (h *StepHasher) computeCopyStepHash(step *Step, tgt *target.Target, fs File
 	}
 
 	stepCopy.Copy = &copyStepcopy
-
-	combined := combinedData{
+	combined := struct {
+		Step   *Step          `json:"step"`
+		Target *target.Target `json:"target"`
+	}{
 		Step:   &stepCopy,
 		Target: tgt,
 	}
 
-	// Marshal the combined data
-	stepData, err := json.Marshal(combined)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal step and target: %w", err)
-	}
+	return json.Marshal(combined)
+}
 
-	// Create a hasher that we'll update with all the relevant data
-	hasher := sha256.New()
-
-	// Add the step configuration (now with sorted exclude patterns)
-	hasher.Write(stepData)
-
-	// Get source info
+// processSourcePath handles the source path for copy step hashing
+func (h *StepHasher) processSourcePath(copyStep *CopyStep, fs FileSystemInterface, hasher hash.Hash) error {
 	localInfo, err := fs.Stat(copyStep.Local)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// If source doesn't exist, just use the step config
-			hashSum := sha256.Sum256(stepData)
-			return hex.EncodeToString(hashSum[:]), nil
+			return nil // Source doesn't exist, hash will only include step config
 		}
-		return "", fmt.Errorf("failed to stat source: %w", err)
+		return fmt.Errorf("failed to stat source: %w", err)
 	}
 
-	// If source is a directory, process all files in it
 	if localInfo.IsDir() {
-		err = h.hashDirectory(copyStep.Local, copyStep.Exclude, fs, hasher)
-		if err != nil {
-			return "", fmt.Errorf("failed to hash directory: %w", err)
+		if err := h.hashDirectory(copyStep.Local, copyStep.Exclude, fs, hasher); err != nil {
+			return fmt.Errorf("failed to hash directory: %w", err)
 		}
 	} else {
-		// For a single file, add its path, modification time, size and mode to the hash
-		// using the same function used for directory entries for consistency
 		addFileInfoToHash(copyStep.Local, localInfo, hasher)
 	}
 
-	// Return the final hash
+	return nil
+}
+
+// computeCopyStepHash generates a hash for a CopyStep that includes source file information
+func (h *StepHasher) computeCopyStepHash(step *Step, tgt *target.Target, fs FileSystemInterface) (string, error) {
+	stepData, err := h.prepareStepData(step, tgt)
+	if err != nil {
+		return "", err
+	}
+
+	hasher := sha256.New()
+	hasher.Write(stepData)
+
+	if err := h.processSourcePath(step.Copy, fs, hasher); err != nil {
+		return "", err
+	}
+
 	return hex.EncodeToString(hasher.Sum(nil)), nil
 }
 

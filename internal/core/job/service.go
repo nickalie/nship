@@ -131,30 +131,41 @@ func (s *Service) storeStepHash(tgt *target.Target, job *Job, stepIndex int, ste
 	return nil
 }
 
+// shouldSkipExecution checks if step execution can be skipped based on service configuration
+func (s *Service) shouldSkipExecution(forceExecute bool) bool {
+	return !forceExecute && s.skipUnchanged && s.hashStorage != nil
+}
+
+// getStepHashes computes current hash and retrieves stored hash
+func (s *Service) getStepHashes(tgt *target.Target, job *Job, stepIndex int, step *Step) (currentHash, storedHash string, err error) {
+	currentHash, err = s.stepHasher.ComputeHash(step, tgt, s.fileSystem)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to compute step hash: %w", err)
+	}
+
+	storedHash, err = s.hashStorage.GetHash(tgt.GetName(), job.Name, stepIndex)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to get stored hash: %w", err)
+	}
+
+	return currentHash, storedHash, nil
+}
+
 // shouldExecuteStep determines if a step should be executed based on its hash
 func (s *Service) shouldExecuteStep(tgt *target.Target, job *Job, stepIndex int, step *Step, forceExecute bool) (bool, error) {
-	// Always execute if any previous step was executed or if skipping is disabled
-	if forceExecute || !s.skipUnchanged || s.hashStorage == nil {
+	if !s.shouldSkipExecution(forceExecute) {
 		return true, nil
 	}
 
-	// Compute the current hash
-	currentHash, err := s.stepHasher.ComputeHash(step, tgt, s.fileSystem)
+	currentHash, storedHash, err := s.getStepHashes(tgt, job, stepIndex, step)
 	if err != nil {
-		return true, fmt.Errorf("failed to compute step hash: %w", err)
-	}
-
-	// Get the stored hash
-	storedHash, err := s.hashStorage.GetHash(tgt.GetName(), job.Name, stepIndex)
-	if err != nil {
-		return true, fmt.Errorf("failed to get stored hash: %w", err)
+		return true, err
 	}
 
 	if step.Copy != nil {
 		fmt.Printf("Stored hash: %s, computed hash %s\n", storedHash, currentHash)
 	}
 
-	// If there's no stored hash or it's different, we should execute the step
 	return storedHash == "" || storedHash != currentHash, nil
 }
 

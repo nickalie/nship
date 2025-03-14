@@ -6,45 +6,48 @@ import (
 	"strings"
 )
 
+// matchPattern checks if a single string matches a given pattern
+func matchPattern(pattern, str string) bool {
+	matched, _ := filepath.Match(pattern, str)
+	return matched
+}
+
+// matchesFullPath checks if the full path matches the pattern
+func matchesFullPath(pattern, normalizedPath string) bool {
+	return matchPattern(pattern, normalizedPath)
+}
+
+// matchesFileName checks if the filename matches the pattern
+func matchesFileName(pattern, name string) bool {
+	return name != "" && matchPattern(pattern, name)
+}
+
+// matchesPathParts checks if any path component matches the pattern
+func matchesPathParts(pattern string, parts []string) bool {
+	for _, part := range parts {
+		if matchPattern(pattern, part) {
+			return true
+		}
+	}
+	return false
+}
+
 // IsExcluded checks if a path matches any exclude pattern
 // It can check against both the full path and just the name (filename) portion
-// Parameters:
-// - path: Full path to check
-// - name: Optional filename to check separately (can be empty)
-// - exclude: List of glob patterns to match against
 func IsExcluded(path, name string, exclude []string) bool {
-	// Normalize path separators for cross-platform consistency
-	normalizedPath := filepath.ToSlash(path)
-
-	// Check only if we have exclusion patterns
 	if len(exclude) == 0 {
 		return false
 	}
 
-	// Check against each pattern
+	normalizedPath := filepath.ToSlash(path)
+	parts := strings.Split(normalizedPath, "/")
+
 	for _, pattern := range exclude {
-		// Match against full path
-		if matched, _ := filepath.Match(pattern, normalizedPath); matched {
+		if matchesFullPath(pattern, normalizedPath) ||
+			matchesFileName(pattern, name) ||
+			matchesPathParts(pattern, parts) {
 			return true
 		}
-
-		// Match against name if provided
-		if name != "" {
-			if matched, _ := filepath.Match(pattern, name); matched {
-				return true
-			}
-		}
-
-		// Match against directory components in the path
-		// This handles cases where the exclude pattern is just a directory name
-		// like "node_modules" that could appear anywhere in the path
-		parts := strings.Split(normalizedPath, "/")
-		for _, part := range parts {
-			if matched, _ := filepath.Match(pattern, part); matched {
-				return true
-			}
-		}
 	}
-
 	return false
 }
