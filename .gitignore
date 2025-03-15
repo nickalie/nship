@@ -6,3 +6,4 @@ cmd/testdata
 coverage
 dist
 temp
+coverage.out
