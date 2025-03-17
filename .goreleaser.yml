@@ -90,16 +90,19 @@ release:
   prerelease: auto
 
 # Homebrew section - uncomment if you want to publish to Homebrew
-# brews:
-#   - tap:
-#       owner: username
-#       name: homebrew-tap
-#     folder: Formula
-#     homepage: https://github.com/username/repo-name
-#     description: Your project description
-#     license: MIT
-#     test: |
-#       system "#{bin}/program --version"
+brews:
+  - tap:
+      owner: nickalie
+      name: homebrew-apps
+      branch: main
+    commit_author:
+      name: nickalie
+      email: nick@nickalie.com
+    homepage: https://nship.dev
+    description: A flexible and efficient deployment automation tool for streamlining execution of deployment jobs across multiple targets
+    license: MIT
+    test: |
+      system "#{bin}/program --version"
 
 # Docker section - uncomment if you want to build Docker images
 # dockers:
