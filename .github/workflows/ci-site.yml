@@ -3,6 +3,10 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'README.md'
+      - 'site/**'
+      - '.github/workflows/ci-site.yml'
 permissions:
   contents: write
 jobs:
