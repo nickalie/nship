@@ -82,7 +82,7 @@ nfpms:
     epoch: 1
     release: 1
 
-Publish section - uncomment and configure if using GitHub releases
+#Publish section - uncomment and configure if using GitHub releases
 release:
   github:
     owner: nickalie
