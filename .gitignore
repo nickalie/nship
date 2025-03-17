@@ -7,3 +7,4 @@ coverage
 dist
 temp
 coverage.out
+site/docs/index.md

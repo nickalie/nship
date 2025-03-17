@@ -11,3 +11,6 @@ tasks:
 
   test:
     cmd: go test -v -cover ./...
+
+  site:
+    cmd: docker run --rm -p 8000:8000 -v ${PWD}/site:/docs -v ${PWD}/README.md:/docs/docs/index.md squidfunk/mkdocs-material

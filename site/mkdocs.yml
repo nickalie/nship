@@ -2,6 +2,8 @@ site_name: NShip
 site_url: https://nship.dev
 theme:
   name: material
+  logo: logo256.png
+  favicon: favicon.png
   palette:
     # Palette toggle for dark mode
     - scheme: slate
@@ -25,4 +27,4 @@ plugins:
       minify_html: true
 
 nav:
-  - NSHIP: index.md
+  - NShip: index.md

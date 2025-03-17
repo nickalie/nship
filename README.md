@@ -1,5 +1,4 @@
-# nship ![logo64](https://github.com/user-attachments/assets/82bc1544-a664-4644-b66f-ca364aa01c4d)
-
+# NShip
 
 nship is a flexible and efficient deployment automation tool designed to streamline the execution of deployment jobs across multiple targets. It simplifies the configuration and execution of deployment workflows by providing structured job and target management.
 
@@ -7,7 +6,7 @@ nship is a flexible and efficient deployment automation tool designed to streaml
 
 - Define deployment jobs with structured steps.
 - Support for remote deployment targets with SSH authentication.
-- Configuration management using YAML, JSON, TypeScript, JavaScript, or Golang.
+- Configuration management using YAML, JSON, TOML, TypeScript, JavaScript, Golang, or any command output.
 - Built-in support for file copying, script execution, and Docker container management.
 - Ansible Vault decryption support for handling secure credentials.
 - Skipping unchanged steps for optimized execution.
