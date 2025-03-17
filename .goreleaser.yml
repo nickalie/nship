@@ -82,12 +82,12 @@ nfpms:
     epoch: 1
     release: 1
 
-# Publish section - uncomment and configure if using GitHub releases
-# release:
-#   github:
-#     owner: username
-#     name: repo-name
-#   prerelease: auto
+Publish section - uncomment and configure if using GitHub releases
+release:
+  github:
+    owner: nickalie
+    name: nship
+  prerelease: auto
 
 # Homebrew section - uncomment if you want to publish to Homebrew
 # brews:
