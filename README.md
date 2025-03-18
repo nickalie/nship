@@ -16,7 +16,51 @@ nship is a flexible and efficient deployment automation tool designed to streaml
 
 ### Installation
 
-To install nship, clone the repository and build the binary using Go:
+You can install nship in several ways:
+
+#### Binary Releases
+
+Download pre-built binaries for your platform from the [GitHub Releases page](https://github.com/nickalie/nship/releases).
+
+We provide binaries for:
+
+- Linux (x86_64, arm64)
+
+- macOS (x86_64, arm64)
+
+- Windows (x86_64, arm64)
+
+#### Linux Package Managers
+
+For Debian/Ubuntu:
+```sh
+curl -LO https://github.com/nickalie/nship/releases/download/v{version}/nship_{version}_linux_x86_64.deb
+sudo dpkg -i nship_{version}_linux_x86_64.deb
+```
+
+For RHEL/CentOS/Fedora:
+```sh
+curl -LO https://github.com/nickalie/nship/releases/download/v{version}/nship_{version}_linux_x86_64.rpm
+sudo rpm -i nship_{version}_linux_x86_64.rpm
+```
+
+For Alpine Linux:
+```sh
+curl -LO https://github.com/nickalie/nship/releases/download/v{version}/nship_{version}_linux_x86_64.apk
+sudo apk add --allow-untrusted nship_{version}_linux_x86_64.apk
+```
+
+#### Go Install
+
+If you have Go installed:
+
+```sh
+go install github.com/nickalie/nship/cmd/nship@latest
+```
+
+#### Build from Source
+
+To build nship from source:
 
 ```sh
 # Clone the repository
@@ -25,12 +69,6 @@ cd nship
 
 # Build the application
 make build
-```
-
-Alternatively, you can install nship using Go:
-
-```sh
-go install github.com/nickalie/nship/cmd/nship@latest
 ```
 
 ### Usage
@@ -357,7 +395,7 @@ Runs a Docker container on the target. If the container already exists, it will 
   - `context` (string, required): Build context path where the Dockerfile is located.
   - `args` (map of key-value pairs, optional): Build arguments to pass to the Docker build command.
 
-## Vault Support
+## Ansible Vault Support
 
 nship supports Ansible Vault for secure credentials management. To decrypt a vault file, use:
 

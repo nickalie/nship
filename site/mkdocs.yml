@@ -1,5 +1,6 @@
 site_name: NShip
 site_url: https://nship.dev
+repo_url: https://github.com/nickalie/nship
 theme:
   name: material
   logo: logo256.png
