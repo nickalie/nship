@@ -91,7 +91,7 @@ release:
 
 # Homebrew section - uncomment if you want to publish to Homebrew
 brews:
-  - tap:
+  - repository:
       owner: nickalie
       name: homebrew-apps
       branch: main
