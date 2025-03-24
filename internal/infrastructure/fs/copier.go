@@ -20,18 +20,17 @@ type SFTPClient interface {
 
 // Copier handles file copy operations
 type Copier struct {
-	fs     FileSystem
 	client SFTPClient
 }
 
 // NewCopier creates a new Copier instance
-func NewCopier(fs FileSystem, client SFTPClient) *Copier {
-	return &Copier{fs: fs, client: client}
+func NewCopier(client SFTPClient) *Copier {
+	return &Copier{client: client}
 }
 
 // CopyPath copies a file or directory
 func (c *Copier) CopyPath(local, remote string, exclude []string) error {
-	localInfo, err := c.fs.Stat(local)
+	localInfo, err := os.Stat(local)
 	if err != nil {
 		return fmt.Errorf("stat source: %w", err)
 	}
@@ -44,7 +43,7 @@ func (c *Copier) CopyPath(local, remote string, exclude []string) error {
 
 // CopyFile copies a single file
 func (c *Copier) CopyFile(local, remote string) error {
-	localFile, err := c.fs.Open(local)
+	localFile, err := os.Open(local)
 	if err != nil {
 		return fmt.Errorf("open source file: %w", err)
 	}
@@ -65,7 +64,7 @@ func (c *Copier) CopyFile(local, remote string) error {
 		return fmt.Errorf("copy file content: %w", err)
 	}
 
-	localInfo, err := c.fs.Stat(local)
+	localInfo, err := os.Stat(local)
 	if err != nil {
 		return fmt.Errorf("stat source file: %w", err)
 	}
@@ -83,7 +82,7 @@ func (c *Copier) CopyDir(local, remote string, exclude []string) error {
 		return fmt.Errorf("create destination directory: %w", err)
 	}
 
-	entries, err := c.fs.ReadDir(local)
+	entries, err := os.ReadDir(local)
 	if err != nil {
 		return fmt.Errorf("read source directory: %w", err)
 	}
@@ -126,7 +125,7 @@ func (c *Copier) processEntry(entry os.DirEntry, local, remote string, exclude [
 }
 
 func (c *Copier) shouldTransferFile(localPath, remotePath string) (bool, error) {
-	localInfo, err := c.fs.Stat(localPath)
+	localInfo, err := os.Stat(localPath)
 	if err != nil {
 		return false, fmt.Errorf("stat local file: %w", err)
 	}

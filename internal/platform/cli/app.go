@@ -44,8 +44,7 @@ func NewApp() *App {
 	envLoader := env.NewLoader()
 	configLoader := config.NewLoader()
 	clientFactory := ssh.NewClientFactory()
-	fileSystem := fs.NewFileSystem()
-	jobService := job.NewService(clientFactory, job.WithFileSystem(fileSystem))
+	jobService := job.NewService(clientFactory)
 
 	return &App{
 		envLoader:    envLoader,
@@ -60,13 +59,11 @@ func NewAppWithSkipUnchanged(skipUnchanged bool) *App {
 	configLoader := config.NewLoader()
 	clientFactory := ssh.NewClientFactory()
 	hashStorage := fs.NewFileHashStorage()
-	fileSystem := fs.NewFileSystem()
 
 	jobService := job.NewService(
 		clientFactory,
 		job.WithHashStorage(hashStorage),
 		job.WithSkipUnchanged(skipUnchanged),
-		job.WithFileSystem(fileSystem),
 	)
 
 	return &App{
@@ -111,12 +108,10 @@ func WithSkipUnchanged(skipUnchanged bool) AppOption {
 	return func(app *App) {
 		hashStorage := fs.NewFileHashStorage()
 		clientFactory := ssh.NewClientFactory()
-		fileSystem := fs.NewFileSystem()
 		app.jobService = job.NewService(
 			clientFactory,
 			job.WithHashStorage(hashStorage),
 			job.WithSkipUnchanged(skipUnchanged),
-			job.WithFileSystem(fileSystem),
 		)
 	}
 }

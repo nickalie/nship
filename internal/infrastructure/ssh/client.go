@@ -27,7 +27,6 @@ type SSHClient struct {
 
 // ClientFactory implements job.ClientFactory using SSH
 type ClientFactory struct {
-	fileSystem    fs.FileSystem
 	sshDialer     SSHDialer
 	sftpConnector SFTPConnector
 }
@@ -61,16 +60,14 @@ func (c *DefaultSFTPConnector) NewClient(sshClient *ssh.Client) (*sftp.Client, e
 // NewClientFactory creates a new SSH client factory with default implementations
 func NewClientFactory() *ClientFactory {
 	return &ClientFactory{
-		fileSystem:    fs.NewFileSystem(),
 		sshDialer:     &DefaultSSHDialer{},
 		sftpConnector: &DefaultSFTPConnector{},
 	}
 }
 
 // NewClientFactoryWithDeps creates a new SSH client factory with custom dependencies
-func NewClientFactoryWithDeps(f fs.FileSystem, dialer SSHDialer, connector SFTPConnector) *ClientFactory {
+func NewClientFactoryWithDeps(dialer SSHDialer, connector SFTPConnector) *ClientFactory {
 	return &ClientFactory{
-		fileSystem:    f,
 		sshDialer:     dialer,
 		sftpConnector: connector,
 	}
@@ -100,7 +97,7 @@ func (f *ClientFactory) NewClient(tgt *target.Target) (job.Client, error) {
 	}
 
 	sftpAdapter := NewSFTPAdapter(sftpClient)
-	copier := fs.NewCopier(f.fileSystem, sftpAdapter)
+	copier := fs.NewCopier(sftpAdapter)
 
 	return &SSHClient{
 		sshClient:  NewSSHAdapter(sshClient),

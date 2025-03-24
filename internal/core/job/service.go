@@ -32,14 +32,6 @@ func WithSkipUnchanged(skip bool) ServiceOption {
 	}
 }
 
-// WithFileSystem sets the filesystem implementation for the service
-// This is required for proper hashing of CopyStep source files
-func WithFileSystem(fs FileSystemInterface) ServiceOption {
-	return func(s *Service) {
-		s.fileSystem = fs
-	}
-}
-
 // NewService creates a new job service with the provided client factory.
 func NewService(clientFactory ClientFactory, opts ...ServiceOption) *Service {
 	service := &Service{

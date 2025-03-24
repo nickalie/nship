@@ -26,11 +26,10 @@ type StepHash struct {
 
 // FileHashStorage implements HashStorage using the file system
 type FileHashStorage struct {
-	baseDir    string
-	fileSystem FileSystem
-	mu         sync.RWMutex
-	hashes     map[string]StepHash
-	loaded     bool
+	baseDir string
+	mu      sync.RWMutex
+	hashes  map[string]StepHash
+	loaded  bool
 }
 
 // NewFileHashStorage creates a new FileHashStorage with the default directory
@@ -41,9 +40,8 @@ func NewFileHashStorage() *FileHashStorage {
 // NewFileHashStorageWithPath creates a new FileHashStorage with a custom directory
 func NewFileHashStorageWithPath(baseDir string) *FileHashStorage {
 	return &FileHashStorage{
-		baseDir:    baseDir,
-		fileSystem: NewFileSystem(),
-		hashes:     make(map[string]StepHash),
+		baseDir: baseDir,
+		hashes:  make(map[string]StepHash),
 	}
 }
 
@@ -97,7 +95,7 @@ func (s *FileHashStorage) Clear() error {
 
 	// Remove hash file if it exists
 	hashFile := s.getHashFilePath()
-	err := s.fileSystem.RemoveAll(hashFile)
+	err := os.RemoveAll(hashFile)
 
 	// Ignore errors if file doesn't exist
 	if err != nil && !os.IsNotExist(err) {
@@ -114,7 +112,7 @@ func (s *FileHashStorage) ensureLoaded() error {
 	}
 
 	hashFile := s.getHashFilePath()
-	data, err := s.fileSystem.ReadFile(hashFile)
+	data, err := os.ReadFile(hashFile)
 
 	if os.IsNotExist(err) {
 		// File doesn't exist yet, that's fine
@@ -158,12 +156,12 @@ func (s *FileHashStorage) persist() error {
 
 	// Create directory if it doesn't exist
 	dir := filepath.Dir(s.getHashFilePath())
-	if err := s.fileSystem.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0755); err != nil {
 		return fmt.Errorf("failed to create hash directory: %w", err)
 	}
 
 	// Write to file
-	if err := s.fileSystem.WriteFile(s.getHashFilePath(), data, 0644); err != nil {
+	if err := os.WriteFile(s.getHashFilePath(), data, 0644); err != nil {
 		return fmt.Errorf("failed to write hash file: %w", err)
 	}
 
