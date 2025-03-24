@@ -256,7 +256,7 @@ func TestExcludePatterns(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Use util.IsExcluded instead of isExcluded
-			result := util.IsExcluded(tt.path, filepath.Base(tt.path), tt.exclude)
+			result := util.IsExcluded(tt.path, tt.exclude)
 			assert.Equal(t, tt.expected, result, "IsExcluded() returned unexpected result")
 		})
 	}

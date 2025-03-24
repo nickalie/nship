@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 
 	"github.com/nickalie/nship/internal/platform/cli"
@@ -21,13 +22,16 @@ type Application struct {
 	noSkip        bool
 	version       bool
 	versionString string
+	// Internal field to store default config paths
+	defaultConfigPaths []string
 }
 
 // NewApplication creates a new Application instance with default values
 func NewApplication() *Application {
 	return &Application{
-		configPath:    "nship.yaml",
-		versionString: revision,
+		configPath:         "nship.yaml",
+		versionString:      revision,
+		defaultConfigPaths: []string{"nship.yaml", "nship.yml"},
 	}
 }
 
@@ -65,11 +69,33 @@ func (app *Application) Run() error {
 	// Create and run application
 	cliApp := cli.NewApp()
 
-	// If no-skip is enabled, use the standard cliApp
-	if app.noSkip {
-		return cliApp.Run(app.configPath, app.jobName, app.envPaths, app.vaultPassword)
+	// If user specified a config path directly, use that
+	if app.configPath != app.defaultConfigPaths[0] {
+		// User has explicitly specified a config path, use it directly
+		if app.noSkip {
+			return cliApp.Run(app.configPath, app.jobName, app.envPaths, app.vaultPassword)
+		}
+		return cli.RunWithSkipUnchanged(app.configPath, app.jobName, app.envPaths, app.vaultPassword, !app.noSkip)
 	}
-	return cli.RunWithSkipUnchanged(app.configPath, app.jobName, app.envPaths, app.vaultPassword, !app.noSkip)
+
+	for _, configPath := range app.defaultConfigPaths {
+		// Check if file exists
+		_, err := os.Stat(configPath)
+		if err == nil {
+			// Found a config file, use it
+			if app.noSkip {
+				return cliApp.Run(configPath, app.jobName, app.envPaths, app.vaultPassword)
+			}
+			return cli.RunWithSkipUnchanged(configPath, app.jobName, app.envPaths, app.vaultPassword, !app.noSkip)
+		}
+	}
+
+	// If we get here, no config file was found, use the first default path
+	// This will likely lead to an error, but maintains backward compatibility
+	if app.noSkip {
+		return cliApp.Run(app.defaultConfigPaths[0], app.jobName, app.envPaths, app.vaultPassword)
+	}
+	return cli.RunWithSkipUnchanged(app.defaultConfigPaths[0], app.jobName, app.envPaths, app.vaultPassword, !app.noSkip)
 }
 
 func main() {

@@ -157,7 +157,7 @@ func (h *StepHasher) hashDirectory(dir string, exclude []string, fileSystem File
 		path := filepath.Join(dir, name)
 
 		// Use the utility package's IsExcluded function
-		if util.IsExcluded(path, name, exclude) {
+		if util.IsExcluded(path, exclude) {
 			continue
 		}
 
