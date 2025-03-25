@@ -17,6 +17,8 @@ import (
 func IsExcluded(path string, exclude []string) bool {
 	// Normalize path separators to forward slash for consistency
 	normalizedPath := filepath.ToSlash(path)
+	// Get the base filename for simple pattern matching
+	baseName := filepath.Base(normalizedPath)
 
 	for _, pattern := range exclude {
 		// Normalize pattern separators
@@ -30,12 +32,29 @@ func IsExcluded(path string, exclude []string) bool {
 			continue
 		}
 
-		// Handle ** pattern matching
-		if matched := matchGlobPattern(normalizedPath, normalizedPattern); matched {
+		// Handle ** pattern matching first
+		if strings.Contains(normalizedPattern, "**") {
+			if matched := matchGlobPattern(normalizedPath, normalizedPattern); matched {
+				return true
+			}
+			continue
+		}
+
+		// For simple patterns without path separators, match against the filename
+		if !strings.Contains(normalizedPattern, "/") {
+			matched, _ := filepath.Match(normalizedPattern, baseName)
+			if matched {
+				return true
+			}
+			continue
+		}
+
+		// For patterns with path separators, match against the full path
+		matched, _ := filepath.Match(normalizedPattern, normalizedPath)
+		if matched {
 			return true
 		}
 	}
-
 	return false
 }
 
