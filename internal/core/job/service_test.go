@@ -3,13 +3,25 @@ package job
 import (
 	"errors"
 	"fmt"
-	"os"
 	"testing"
 
 	"github.com/nickalie/nship/internal/core/target"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 )
+
+// MockStepHasher implements StepHasherInterface for testing
+type MockStepHasher struct {
+	ComputeHashFunc func(step *Step, tgt *target.Target) (string, error)
+}
+
+// ComputeHash implements the hashing functionality
+func (m *MockStepHasher) ComputeHash(step *Step, tgt *target.Target) (string, error) {
+	if m.ComputeHashFunc != nil {
+		return m.ComputeHashFunc(step, tgt)
+	}
+	return "", errors.New("ComputeHash not implemented")
+}
 
 func TestNewServiceWithOptions(t *testing.T) {
 	mockClientFactory := &MockClientFactory{}
@@ -25,19 +37,6 @@ func TestNewServiceWithOptions(t *testing.T) {
 	assert.Equal(t, false, service.skipUnchanged, "SkipUnchanged option was not applied")
 }
 
-// MockStepHasher implements StepHasherInterface for testing
-type MockStepHasher struct {
-	ComputeHashFunc func(step *Step, tgt *target.Target, fs FileSystemInterface) (string, error)
-}
-
-// ComputeHash implements the hashing functionality
-func (m *MockStepHasher) ComputeHash(step *Step, tgt *target.Target, fs FileSystemInterface) (string, error) {
-	if m.ComputeHashFunc != nil {
-		return m.ComputeHashFunc(step, tgt, fs)
-	}
-	return "", errors.New("ComputeHash not implemented")
-}
-
 func TestShouldExecuteStep(t *testing.T) {
 	// Create step for testing
 	step := &Step{Run: "echo test"}
@@ -45,15 +44,8 @@ func TestShouldExecuteStep(t *testing.T) {
 
 	// Create a mock StepHasher that always returns defaultHash
 	mockStepHasher := &MockStepHasher{
-		ComputeHashFunc: func(step *Step, tgt *target.Target, fs FileSystemInterface) (string, error) {
+		ComputeHashFunc: func(step *Step, tgt *target.Target) (string, error) {
 			return defaultHash, nil
-		},
-	}
-
-	// Create mock filesystem
-	mockFS := &MockFileSystemForHashing{
-		StatFunc: func(name string) (os.FileInfo, error) {
-			return &MockFileInfoForHashing{}, nil
 		},
 	}
 
@@ -142,12 +134,10 @@ func TestShouldExecuteStep(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Create service with test configuration
-			// Create service with test configuration
 			service := &Service{
-				stepHasher:    mockStepHasher, // Use our mock hasher
+				stepHasher:    mockStepHasher,
 				skipUnchanged: tt.skipUnchanged,
 				hashStorage:   tt.hashStorage,
-				fileSystem:    mockFS,
 			}
 
 			// Create target and job for testing
@@ -186,13 +176,6 @@ func TestStepSkipping(t *testing.T) {
 			{Run: "echo step1"},
 			{Run: "echo step2"},
 			{Run: "echo step3"},
-		},
-	}
-
-	// Create a mock filesystem for hashing
-	mockFS := &MockFileSystemForHashing{
-		StatFunc: func(name string) (os.FileInfo, error) {
-			return &MockFileInfoForHashing{}, nil
 		},
 	}
 
@@ -245,7 +228,7 @@ func TestStepSkipping(t *testing.T) {
 				// Set up stored hashes for all steps
 				hashStore = make(map[string]string)
 				for i, step := range job.Steps {
-					hash, _ := (&StepHasher{}).ComputeHash(step, tgt, mockFS)
+					hash, _ := (&StepHasher{}).ComputeHash(step, tgt)
 					key := fmt.Sprintf("%s:%s:%d", tgt.GetName(), job.Name, i)
 					hashStore[key] = hash
 				}
@@ -259,7 +242,7 @@ func TestStepSkipping(t *testing.T) {
 				// Set up stored hashes for all steps
 				hashStore = make(map[string]string)
 				for i, step := range job.Steps {
-					hash, _ := (&StepHasher{}).ComputeHash(step, tgt, mockFS)
+					hash, _ := (&StepHasher{}).ComputeHash(step, tgt)
 					key := fmt.Sprintf("%s:%s:%d", tgt.GetName(), job.Name, i)
 					hashStore[key] = hash
 				}
@@ -274,7 +257,7 @@ func TestStepSkipping(t *testing.T) {
 				hashStore = make(map[string]string)
 
 				// Step 0 has matching hash
-				hash, _ := (&StepHasher{}).ComputeHash(job.Steps[0], tgt, mockFS)
+				hash, _ := (&StepHasher{}).ComputeHash(job.Steps[0], tgt)
 				key := fmt.Sprintf("%s:%s:%d", tgt.GetName(), job.Name, 0)
 				hashStore[key] = hash
 
@@ -283,7 +266,7 @@ func TestStepSkipping(t *testing.T) {
 				hashStore[key] = "different_hash"
 
 				// Step 2 has matching hash, but we expect it to run due to step 1 change
-				hash, _ = (&StepHasher{}).ComputeHash(job.Steps[2], tgt, mockFS)
+				hash, _ = (&StepHasher{}).ComputeHash(job.Steps[2], tgt)
 				key = fmt.Sprintf("%s:%s:%d", tgt.GetName(), job.Name, 2)
 				hashStore[key] = hash
 			},

@@ -1,7 +1,6 @@
 package job
 
 import (
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -9,26 +8,6 @@ import (
 	"github.com/nickalie/nship/internal/core/target"
 	"github.com/stretchr/testify/assert"
 )
-
-// MockFileSystemForHashing implements FileSystemInterface for testing
-type MockFileSystemForHashing struct {
-	StatFunc    func(name string) (os.FileInfo, error)
-	ReadDirFunc func(name string) ([]os.DirEntry, error)
-}
-
-func (m *MockFileSystemForHashing) Stat(name string) (os.FileInfo, error) {
-	if m.StatFunc != nil {
-		return m.StatFunc(name)
-	}
-	return nil, fmt.Errorf("Stat not implemented")
-}
-
-func (m *MockFileSystemForHashing) ReadDir(name string) ([]os.DirEntry, error) {
-	if m.ReadDirFunc != nil {
-		return m.ReadDirFunc(name)
-	}
-	return nil, fmt.Errorf("ReadDir not implemented")
-}
 
 // MockFileInfoForHashing implements os.FileInfo for testing
 type MockFileInfoForHashing struct {
@@ -118,39 +97,30 @@ func (m *MockDirEntryForHashing) Info() (os.FileInfo, error) {
 	return &MockFileInfoForHashing{}, nil
 }
 
-// createMockFilesystem creates a mock filesystem with configurable parameters
-func createMockFilesystem(isDir bool, modTime time.Time, fileSize int64, fileEntries []string) *MockFileSystemForHashing {
-	return &MockFileSystemForHashing{
-		StatFunc: func(name string) (os.FileInfo, error) {
-			if isDir && name == "local" {
-				return &MockFileInfoForHashing{
-					IsDirFunc: func() bool { return true },
-				}, nil
-			}
-			return &MockFileInfoForHashing{
-				ModTimeFunc: func() time.Time { return modTime },
-				SizeFunc:    func() int64 { return fileSize },
-				IsDirFunc:   func() bool { return false },
-			}, nil
-		},
-		ReadDirFunc: func(name string) ([]os.DirEntry, error) {
-			entries := make([]os.DirEntry, len(fileEntries))
-			for i, fileName := range fileEntries {
-				entries[i] = &MockDirEntryForHashing{
-					NameFunc:  func() string { return fileName },
-					IsDirFunc: func() bool { return false },
-				}
-			}
-			return entries, nil
-		},
+// createTestFileStructure creates real temporary files for testing
+func createTestFileStructure(t *testing.T, content string) (string, func()) {
+	tempDir, err := os.MkdirTemp("", "test-hash-*")
+	assert.NoError(t, err)
+
+	cleanup := func() {
+		os.RemoveAll(tempDir)
 	}
+
+	// Create a test file
+	err = os.WriteFile(tempDir+"/test.txt", []byte(content), 0644)
+	assert.NoError(t, err)
+
+	// Create a subdirectory with a file
+	err = os.MkdirAll(tempDir+"/subdir", 0755)
+	assert.NoError(t, err)
+	err = os.WriteFile(tempDir+"/subdir/subfile.txt", []byte(content), 0644)
+	assert.NoError(t, err)
+
+	return tempDir, cleanup
 }
 
 func TestStepHasher_ComputeHash(t *testing.T) {
 	hasher := NewStepHasher()
-
-	// Create a nil FileSystem for basic tests
-	var nilFS FileSystemInterface = nil
 
 	// Create a test target
 	testTarget := &target.Target{
@@ -165,10 +135,10 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		step1 := &Step{Run: "echo hello"}
 		step2 := &Step{Run: "echo hello"}
 
-		hash1, err := hasher.ComputeHash(step1, testTarget, nilFS)
+		hash1, err := hasher.ComputeHash(step1, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for step1")
 
-		hash2, err := hasher.ComputeHash(step2, testTarget, nilFS)
+		hash2, err := hasher.ComputeHash(step2, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for step2")
 
 		assert.Equal(t, hash1, hash2, "Identical steps should have the same hash")
@@ -179,10 +149,10 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		step1 := &Step{Run: "echo hello"}
 		step2 := &Step{Run: "echo world"}
 
-		hash1, err := hasher.ComputeHash(step1, testTarget, nilFS)
+		hash1, err := hasher.ComputeHash(step1, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for step1")
 
-		hash2, err := hasher.ComputeHash(step2, testTarget, nilFS)
+		hash2, err := hasher.ComputeHash(step2, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for step2")
 
 		assert.NotEqual(t, hash1, hash2, "Different steps should have different hashes")
@@ -194,10 +164,10 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		target1 := &target.Target{Name: "server1", Host: "10.0.0.1"}
 		target2 := &target.Target{Name: "server2", Host: "10.0.0.2"}
 
-		hash1, err := hasher.ComputeHash(step, target1, nilFS)
+		hash1, err := hasher.ComputeHash(step, target1)
 		assert.NoError(t, err, "Failed to compute hash for step with target1")
 
-		hash2, err := hasher.ComputeHash(step, target2, nilFS)
+		hash2, err := hasher.ComputeHash(step, target2)
 		assert.NoError(t, err, "Failed to compute hash for step with target2")
 
 		assert.NotEqual(t, hash1, hash2, "Same step with different targets should have different hashes")
@@ -205,17 +175,20 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 
 	// Test steps with different types
 	t.Run("different step types have different hashes", func(t *testing.T) {
+		tempDir, cleanup := createTestFileStructure(t, "test content")
+		defer cleanup()
+
 		runStep := &Step{Run: "echo hello"}
-		copyStep := &Step{Copy: &CopyStep{Local: "local", Remote: "remote"}}
+		copyStep := &Step{Copy: &CopyStep{Local: tempDir + "/test.txt", Remote: "remote/file.txt"}}
 		dockerStep := &Step{Docker: &DockerStep{Image: "nginx", Name: "web"}}
 
-		hashRun, err := hasher.ComputeHash(runStep, testTarget, nilFS)
+		hashRun, err := hasher.ComputeHash(runStep, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for runStep")
 
-		hashCopy, err := hasher.ComputeHash(copyStep, testTarget, nilFS)
+		hashCopy, err := hasher.ComputeHash(copyStep, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for copyStep")
 
-		hashDocker, err := hasher.ComputeHash(dockerStep, testTarget, nilFS)
+		hashDocker, err := hasher.ComputeHash(dockerStep, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for dockerStep")
 
 		assert.NotEqual(t, hashRun, hashCopy, "Run and Copy steps should have different hashes")
@@ -248,7 +221,7 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 			},
 		}
 
-		hash, err := hasher.ComputeHash(complexStep, testTarget, nilFS)
+		hash, err := hasher.ComputeHash(complexStep, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for complex step")
 		assert.NotEmpty(t, hash, "Hash for complex step should not be empty")
 	})
@@ -258,10 +231,10 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 		step1 := &Step{Run: "echo hello", Shell: "sh"}
 		step2 := &Step{Run: "echo hello", Shell: "bash"}
 
-		hash1, err := hasher.ComputeHash(step1, testTarget, nilFS)
+		hash1, err := hasher.ComputeHash(step1, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for step1")
 
-		hash2, err := hasher.ComputeHash(step2, testTarget, nilFS)
+		hash2, err := hasher.ComputeHash(step2, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for step2")
 
 		assert.NotEqual(t, hash1, hash2, "Steps with different shells should have different hashes")
@@ -269,55 +242,42 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 
 	// Test file-based hashing for CopyStep
 	t.Run("file content affects hash for CopyStep", func(t *testing.T) {
-		// Create a mock filesystem
-		fixedTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
+		tempDir1, cleanup1 := createTestFileStructure(t, "content1")
+		defer cleanup1()
+		tempDir2, cleanup2 := createTestFileStructure(t, "content2")
+		defer cleanup2()
 
-		mockFS := createMockFilesystem(false, fixedTime, 100, nil)
-
-		// Create two identical copy steps
-		copyStep1 := &Step{Copy: &CopyStep{Local: "local/file.txt", Remote: "remote/file.txt"}}
-		copyStep2 := &Step{Copy: &CopyStep{Local: "local/file.txt", Remote: "remote/file.txt"}}
+		// Create two identical copy steps pointing to different files
+		copyStep1 := &Step{Copy: &CopyStep{Local: tempDir1 + "/test.txt", Remote: "remote/file.txt"}}
+		copyStep2 := &Step{Copy: &CopyStep{Local: tempDir2 + "/test.txt", Remote: "remote/file.txt"}}
 
 		// Compute hashes
-		hash1, err := hasher.ComputeHash(copyStep1, testTarget, mockFS)
+		hash1, err := hasher.ComputeHash(copyStep1, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for copyStep1")
 
-		hash2, err := hasher.ComputeHash(copyStep2, testTarget, mockFS)
+		hash2, err := hasher.ComputeHash(copyStep2, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for copyStep2")
 
-		// Hashes should be the same for identical files
-		assert.Equal(t, hash1, hash2, "Identical copy steps should have the same hash")
-
-		// Now create a mock with different file content
-		mockFSModified := createMockFilesystem(false, fixedTime.Add(time.Hour), 200, nil)
-
-		// Compute hash with different file content
-		hash3, err := hasher.ComputeHash(copyStep1, testTarget, mockFSModified)
-		assert.NoError(t, err, "Failed to compute hash for copyStep1 with modified file")
-
-		// Hashes should be different
-		assert.NotEqual(t, hash1, hash3, "Copy steps with different file content should have different hashes")
+		// Hashes should be different due to different file content
+		assert.NotEqual(t, hash1, hash2, "Copy steps with different file content should have different hashes")
 	})
 
 	// Test directory-based hashing for CopyStep
 	t.Run("directory content affects hash for CopyStep", func(t *testing.T) {
-		fixedTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
-
-		// Create a mock filesystem with a directory
-		mockFS := createMockFilesystem(true, fixedTime, 100, []string{"file1.txt", "file2.txt"})
+		tempDir1, cleanup1 := createTestFileStructure(t, "content1")
+		defer cleanup1()
+		tempDir2, cleanup2 := createTestFileStructure(t, "content2")
+		defer cleanup2()
 
 		// Create a copy step for a directory
-		dirCopyStep := &Step{Copy: &CopyStep{Local: "local", Remote: "remote"}}
+		dirCopyStep1 := &Step{Copy: &CopyStep{Local: tempDir1, Remote: "remote"}}
+		dirCopyStep2 := &Step{Copy: &CopyStep{Local: tempDir2, Remote: "remote"}}
 
 		// Compute hash
-		hash1, err := hasher.ComputeHash(dirCopyStep, testTarget, mockFS)
+		hash1, err := hasher.ComputeHash(dirCopyStep1, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for directory copy step")
 
-		// Create a mock with different directory content
-		mockFSModified := createMockFilesystem(true, fixedTime, 100, []string{"file1.txt", "file3.txt"})
-
-		// Compute hash with different directory content
-		hash2, err := hasher.ComputeHash(dirCopyStep, testTarget, mockFSModified)
+		hash2, err := hasher.ComputeHash(dirCopyStep2, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for directory copy step with modified content")
 
 		// Hashes should be different
@@ -326,29 +286,27 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 
 	// Test exclude patterns affect the hash
 	t.Run("exclude patterns affect hash for CopyStep", func(t *testing.T) {
-		fixedTime := time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC)
-
-		// Create a mock filesystem
-		mockFS := createMockFilesystem(true, fixedTime, 100, []string{"file1.txt", "file2.txt"})
+		tempDir, cleanup := createTestFileStructure(t, "test content")
+		defer cleanup()
 
 		// Create two copy steps with different exclude patterns
 		copyStep1 := &Step{Copy: &CopyStep{
-			Local:   "local",
+			Local:   tempDir,
 			Remote:  "remote",
 			Exclude: []string{"*.log"},
 		}}
 
 		copyStep2 := &Step{Copy: &CopyStep{
-			Local:   "local",
+			Local:   tempDir,
 			Remote:  "remote",
 			Exclude: []string{"*.log", "*.tmp"},
 		}}
 
 		// Compute hashes
-		hash1, err := hasher.ComputeHash(copyStep1, testTarget, mockFS)
+		hash1, err := hasher.ComputeHash(copyStep1, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for copyStep1")
 
-		hash2, err := hasher.ComputeHash(copyStep2, testTarget, mockFS)
+		hash2, err := hasher.ComputeHash(copyStep2, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for copyStep2")
 
 		// Hashes should be different despite same files because exclude patterns differ
@@ -356,12 +314,12 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 
 		// Create a copy step with same patterns but different order
 		copyStep3 := &Step{Copy: &CopyStep{
-			Local:   "local",
+			Local:   tempDir,
 			Remote:  "remote",
 			Exclude: []string{"*.tmp", "*.log"}, // Same patterns as copyStep2 but different order
 		}}
 
-		hash3, err := hasher.ComputeHash(copyStep3, testTarget, mockFS)
+		hash3, err := hasher.ComputeHash(copyStep3, testTarget)
 		assert.NoError(t, err, "Failed to compute hash for copyStep3")
 
 		// Hashes should be the same despite pattern order difference
