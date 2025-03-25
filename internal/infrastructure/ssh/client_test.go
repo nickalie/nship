@@ -197,7 +197,8 @@ func TestExecuteCommand_Error(t *testing.T) {
 func TestNewClientFactory(t *testing.T) {
 	factory := NewClientFactory()
 	assert.NotNil(t, factory, "NewClientFactory should not return nil")
-	assert.NotNil(t, factory.fileSystem, "ClientFactory.fileSystem should not be nil")
+	assert.NotNil(t, factory.sshDialer, "ClientFactory.sshDialer should not be nil")
+	assert.NotNil(t, factory.sftpConnector, "ClientFactory.sftpConnector should not be nil")
 }
 
 func TestGetAuthMethods(t *testing.T) {

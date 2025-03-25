@@ -31,7 +31,7 @@ type DockerStep struct {
 	Volumes     []string          `yaml:"volumes" json:"volumes" toml:"volumes" validate:"omitempty,dive,required"`
 	Labels      map[string]string `yaml:"labels" json:"labels" toml:"labels" validate:"omitempty"`
 	Networks    []string          `yaml:"networks" json:"networks" toml:"networks" validate:"omitempty,dive,required"`
-	Commands    []string          `yaml:"commands" json:"commands" toml:"commands" validate:"omitempty,dive,required"`
+	Command     []string          `yaml:"command" json:"command" toml:"command" validate:"omitempty,dive,required"`
 	Restart     string            `yaml:"restart" json:"restart" toml:"restart" validate:"omitempty,oneof=no on-failure always unless-stopped"`
 }
 

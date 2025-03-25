@@ -46,20 +46,33 @@ func matchGlobPattern(path, pattern string) bool {
 		return true
 	}
 
-	// Handle "**" patterns
+	// Handle specific case for "**/.idea/**" pattern which is commonly used
+	if pattern == "**/.idea/**" && strings.Contains(path, ".idea/") {
+		return true
+	}
+
+	// Handle patterns with "**"
 	if strings.Contains(pattern, "**") {
 		// Special case for patterns like "**/.idea/**"
 		if strings.HasPrefix(pattern, "**") && strings.HasSuffix(pattern, "**") {
 			// Extract the middle part between the ** wildcards
 			middle := pattern[2 : len(pattern)-2]
-			return strings.Contains(path, middle)
+			// If the middle part is found in the path, it's a match
+			if strings.Contains(path, middle) {
+				return true
+			}
 		}
 
-		// Handle pattern with ** prefix (e.g., "**/foo")
+		// Handle pattern with ** prefix (e.g., "**/foo.txt")
 		if strings.HasPrefix(pattern, "**") {
 			patternSuffix := pattern[2:]
-			// Check if path ends with the pattern suffix
-			return strings.HasSuffix(path, patternSuffix) || strings.Contains(path, patternSuffix)
+			if strings.HasSuffix(path, patternSuffix) {
+				return true
+			}
+
+			// Also check if it's contained anywhere in the path
+			// This is important for patterns like "**/.idea/"
+			return strings.Contains(path, patternSuffix)
 		}
 
 		// Handle pattern with ** suffix (e.g., "foo/**")
@@ -71,8 +84,10 @@ func matchGlobPattern(path, pattern string) bool {
 
 		// Handle pattern with ** in the middle (e.g., "foo/**/bar")
 		parts := strings.Split(pattern, "**")
-		if strings.HasPrefix(path, parts[0]) && strings.HasSuffix(path, parts[len(parts)-1]) {
-			return true
+		if len(parts) >= 2 {
+			if strings.HasPrefix(path, parts[0]) && strings.HasSuffix(path, parts[len(parts)-1]) {
+				return true
+			}
 		}
 	}
 

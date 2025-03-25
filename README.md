@@ -371,7 +371,7 @@ Runs a Docker container on the target. If the container already exists, it will 
     networks:
       - "custom-network"
     restart: "always"
-    commands:
+    command:
       - "npm start"
     build:
       context: ./path/to/directory/with/dockerfile
@@ -390,7 +390,7 @@ Runs a Docker container on the target. If the container already exists, it will 
 - `labels` (map of key-value pairs, optional): Labels to assign to the container.
 - `networks` (list of strings, optional): List of network names to connect the container.
 - `restart` (string, optional): Restart policy (`no`, `on-failure`, `always`, `unless-stopped`).
-- `commands` (list of strings, optional): List of commands to run inside the container.
+- `command` (list of strings, optional): List of commands to run inside the container.
 - `build` (object, optional): Configuration for building the Docker image before running the container.
   - `context` (string, required): Build context path where the Dockerfile is located.
   - `args` (map of key-value pairs, optional): Build arguments to pass to the Docker build command.

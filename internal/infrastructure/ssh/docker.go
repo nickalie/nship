@@ -89,36 +89,28 @@ func (b *DockerCommandBuilder) appendDockerBuildArgs(flag string, args map[strin
 // buildDockerCreateCommand builds a docker create command
 func (b *DockerCommandBuilder) buildDockerCreateCommand() string {
 	args := []string{"docker create"}
-
 	if b.docker.Name != "" {
 		args = append(args, "--name", b.docker.Name)
 	}
-
 	if b.docker.Restart != "" {
 		args = append(args, "--restart", b.docker.Restart)
 	}
-
 	// Get env keys and sort them for consistent order
 	envKeys := make([]string, 0, len(b.docker.Environment))
 	for k := range b.docker.Environment {
 		envKeys = append(envKeys, k)
 	}
 	sort.Strings(envKeys)
-
 	// Add environment variables in sorted order
 	for _, k := range envKeys {
 		args = append(args, "-e", fmt.Sprintf("%s=%q", k, b.docker.Environment[k]))
 	}
-
 	args = append(args, b.appendDockerArgs("-p", b.docker.Ports)...)
 	args = append(args, b.appendDockerArgs("-v", b.docker.Volumes)...)
 	args = append(args, b.appendDockerLabels("-l", b.docker.Labels)...)
 	args = append(args, b.appendDockerArgs("--network", b.docker.Networks)...)
-
 	args = append(args, b.docker.Image)
-
-	args = append(args, b.docker.Commands...)
-
+	args = append(args, b.docker.Command...)
 	return strings.Join(args, " ")
 }
 

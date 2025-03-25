@@ -99,7 +99,6 @@ func runConfigInternal(cfg *Config, jobName string, skipUnchanged bool, hashStor
 	}
 
 	clientFactory := ssh.NewClientFactory()
-	fileSystem := fs.NewFileSystem()
 
 	// Create service with options including the filesystem for proper CopyStep hashing
 	serviceOptions := []job.ServiceOption{job.WithSkipUnchanged(skipUnchanged)}
@@ -108,9 +107,6 @@ func runConfigInternal(cfg *Config, jobName string, skipUnchanged bool, hashStor
 	if hashStorage != nil {
 		serviceOptions = append(serviceOptions, job.WithHashStorage(hashStorage))
 	}
-
-	// Always add filesystem for proper CopyStep handling
-	serviceOptions = append(serviceOptions, job.WithFileSystem(fileSystem))
 
 	jobService := job.NewService(clientFactory, serviceOptions...)
 

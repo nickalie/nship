@@ -92,9 +92,9 @@ func TestDockerCommandBuilder_BuildCommands(t *testing.T) {
 		{
 			name: "docker with commands",
 			dockerStep: &job.DockerStep{
-				Image:    "alpine:latest",
-				Name:     "task",
-				Commands: []string{"sh", "-c", "echo hello && sleep 10"},
+				Image:   "alpine:latest",
+				Name:    "task",
+				Command: []string{"sh", "-c", "echo hello && sleep 10"},
 			},
 			expectedCmds: []string{
 				// Update the expected command format
@@ -254,9 +254,9 @@ func TestBuildDockerCreateCommand(t *testing.T) {
 		{
 			name: "create with command",
 			dockerStep: &job.DockerStep{
-				Image:    "alpine:latest",
-				Name:     "task",
-				Commands: []string{"sh", "-c", "echo hello"},
+				Image:   "alpine:latest",
+				Name:    "task",
+				Command: []string{"sh", "-c", "echo hello"},
 			},
 			expectedParts: []string{
 				"docker create",

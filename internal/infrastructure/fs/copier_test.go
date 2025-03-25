@@ -94,11 +94,18 @@ func setupMockFileSystem(content []byte, isDir bool) *MockFileSystem {
 }
 
 func TestCopyFile(t *testing.T) {
+	// Create temporary test directory
+	tempDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	// Create source file with test content
 	mockContent := []byte("test file content")
+	sourceFile := filepath.Join(tempDir, "file.txt")
+	err := os.WriteFile(sourceFile, mockContent, 0644)
+	require.NoError(t, err, "Failed to create test source file")
+
 	fileCreated := false
 	fileWritten := false
-
-	mockFS := setupMockFileSystem(mockContent, false)
 
 	mockSFTP := &MockSFTPClient{
 		CreateFunc: func(path string) (io.WriteCloser, error) {
@@ -120,8 +127,8 @@ func TestCopyFile(t *testing.T) {
 		},
 	}
 
-	copier := NewCopier(mockFS, mockSFTP)
-	err := copier.CopyFile("local/file.txt", "remote/file.txt")
+	copier := NewCopier(mockSFTP)
+	err = copier.CopyFile(sourceFile, "remote/file.txt")
 
 	assert.NoError(t, err, "CopyFile should not return an error")
 	assert.True(t, fileCreated, "Destination file was not created")
@@ -129,54 +136,20 @@ func TestCopyFile(t *testing.T) {
 }
 
 func TestCopyDir(t *testing.T) {
-	mockFS := &MockFileSystem{
-		StatFunc: func(name string) (os.FileInfo, error) {
-			name = filepath.ToSlash(name)
-			if name == "local" || name == "local/subdir" {
-				return &MockFileInfo{
-					IsDirFunc: func() bool {
-						return true
-					},
-				}, nil
-			}
-			return &MockFileInfo{
-				IsDirFunc: func() bool {
-					return false
-				},
-			}, nil
-		},
-		ReadDirFunc: func(name string) ([]os.DirEntry, error) {
-			name = filepath.ToSlash(name)
-			switch name {
-			case "local":
-				return []os.DirEntry{
-					&MockDirEntry{
-						NameFunc:  func() string { return "file1.txt" },
-						IsDirFunc: func() bool { return false },
-					},
-					&MockDirEntry{
-						NameFunc:  func() string { return "subdir" },
-						IsDirFunc: func() bool { return true },
-					},
-				}, nil
-			case "local/subdir":
-				return []os.DirEntry{
-					&MockDirEntry{
-						NameFunc:  func() string { return "file2.txt" },
-						IsDirFunc: func() bool { return false },
-					},
-				}, nil
-			default:
-				return nil, fmt.Errorf("directory not found: %s", name)
-			}
-		},
-		OpenFunc: func(name string) (io.ReadCloser, error) {
-			return &MockReadCloser{}, nil
-		},
-		ReadFileFunc: func(name string) ([]byte, error) {
-			return []byte("test content"), nil
-		},
-	}
+	// Create temporary test directory
+	tempDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	// Create test directory structure
+	sourceDir := filepath.Join(tempDir, "local")
+	subdirPath := filepath.Join(sourceDir, "subdir")
+	require.NoError(t, os.MkdirAll(subdirPath, 0755), "Failed to create test subdirectory")
+
+	// Create test files
+	file1Path := filepath.Join(sourceDir, "file1.txt")
+	file2Path := filepath.Join(subdirPath, "file2.txt")
+	require.NoError(t, os.WriteFile(file1Path, []byte("file1 content"), 0644), "Failed to create file1.txt")
+	require.NoError(t, os.WriteFile(file2Path, []byte("file2 content"), 0644), "Failed to create file2.txt")
 
 	createdDirs := make(map[string]bool)
 	createdFiles := make(map[string]bool)
@@ -195,8 +168,8 @@ func TestCopyDir(t *testing.T) {
 		},
 	}
 
-	copier := NewCopier(mockFS, mockSFTP)
-	err := copier.CopyDir("local", "remote", nil)
+	copier := NewCopier(mockSFTP)
+	err := copier.CopyDir(sourceDir, "remote", nil)
 
 	assert.NoError(t, err, "CopyDir should not return an error")
 
@@ -280,7 +253,7 @@ func TestCopyPath(t *testing.T) {
 		remote      string
 		exclude     []string
 		isSourceDir bool
-		setupMock   func() (*MockFileSystem, *MockSFTPClient)
+		setupMock   func() *MockSFTPClient
 		expectErr   bool
 	}{
 		{
@@ -289,11 +262,7 @@ func TestCopyPath(t *testing.T) {
 			remote:      "remote/file.txt",
 			exclude:     nil,
 			isSourceDir: false,
-			setupMock: func() (*MockFileSystem, *MockSFTPClient) {
-				mockContent := []byte("test file content")
-
-				mockFS := setupMockFileSystem(mockContent, false)
-
+			setupMock: func() *MockSFTPClient {
 				mockSFTP := &MockSFTPClient{
 					CreateFunc: func(path string) (io.WriteCloser, error) {
 						return &MockWriteCloser{}, nil
@@ -302,8 +271,7 @@ func TestCopyPath(t *testing.T) {
 						return nil, os.ErrNotExist
 					},
 				}
-
-				return mockFS, mockSFTP
+				return mockSFTP
 			},
 			expectErr: false,
 		},
@@ -313,27 +281,13 @@ func TestCopyPath(t *testing.T) {
 			remote:      "remote",
 			exclude:     nil,
 			isSourceDir: true,
-			setupMock: func() (*MockFileSystem, *MockSFTPClient) {
-				mockFS := &MockFileSystem{
-					StatFunc: func(name string) (os.FileInfo, error) {
-						return &MockFileInfo{
-							IsDirFunc: func() bool {
-								return true
-							},
-						}, nil
-					},
-					ReadDirFunc: func(name string) ([]os.DirEntry, error) {
-						return []os.DirEntry{}, nil
-					},
-				}
-
+			setupMock: func() *MockSFTPClient {
 				mockSFTP := &MockSFTPClient{
 					MkdirAllFunc: func(path string) error {
 						return nil
 					},
 				}
-
-				return mockFS, mockSFTP
+				return mockSFTP
 			},
 			expectErr: false,
 		},
@@ -343,16 +297,9 @@ func TestCopyPath(t *testing.T) {
 			remote:      "remote",
 			exclude:     nil,
 			isSourceDir: false,
-			setupMock: func() (*MockFileSystem, *MockSFTPClient) {
-				mockFS := &MockFileSystem{
-					StatFunc: func(name string) (os.FileInfo, error) {
-						return nil, os.ErrNotExist
-					},
-				}
-
+			setupMock: func() *MockSFTPClient {
 				mockSFTP := &MockSFTPClient{}
-
-				return mockFS, mockSFTP
+				return mockSFTP
 			},
 			expectErr: true,
 		},
@@ -362,81 +309,7 @@ func TestCopyPath(t *testing.T) {
 			remote:      "remote",
 			exclude:     []string{"*.log", "node_modules"},
 			isSourceDir: true,
-			setupMock: func() (*MockFileSystem, *MockSFTPClient) {
-				mockFS := &MockFileSystem{
-					StatFunc: func(name string) (os.FileInfo, error) {
-						// Fix: Handle paths properly to avoid infinite recursion
-						baseName := filepath.Base(name)
-
-						// Explicitly handle paths we know about
-						if name == "local" {
-							return &MockFileInfo{
-								IsDirFunc: func() bool { return true },
-							}, nil
-						}
-
-						if baseName == "debug.log" || baseName == "node_modules" {
-							return &MockFileInfo{
-								IsDirFunc: func() bool { return baseName == "node_modules" },
-								SizeFunc:  func() int64 { return 100 },
-							}, nil
-						}
-
-						if baseName == "file.txt" {
-							return &MockFileInfo{
-								IsDirFunc: func() bool { return false },
-								SizeFunc:  func() int64 { return 200 },
-							}, nil
-						}
-
-						// For any other paths, default behavior
-						return &MockFileInfo{
-							IsDirFunc: func() bool { return false },
-							SizeFunc:  func() int64 { return 0 },
-						}, nil
-					},
-					ReadDirFunc: func(name string) ([]os.DirEntry, error) {
-						// Only return entries for the root local directory
-						// to prevent recursive scanning
-						if name == "local" {
-							return []os.DirEntry{
-								&MockDirEntry{
-									NameFunc:  func() string { return "file.txt" },
-									IsDirFunc: func() bool { return false },
-								},
-								&MockDirEntry{
-									NameFunc:  func() string { return "debug.log" },
-									IsDirFunc: func() bool { return false },
-								},
-								&MockDirEntry{
-									NameFunc:  func() string { return "node_modules" },
-									IsDirFunc: func() bool { return true },
-								},
-							}, nil
-						}
-
-						// For node_modules dir, return empty to avoid recursion
-						if filepath.Base(name) == "node_modules" {
-							return []os.DirEntry{}, nil
-						}
-
-						return []os.DirEntry{}, nil
-					},
-					OpenFunc: func(name string) (io.ReadCloser, error) {
-						return &MockReadCloser{
-							ReadFunc: func(p []byte) (n int, err error) {
-								// Return a small amount of content to avoid memory issues
-								content := []byte("test")
-								copy(p, content)
-								return len(content), io.EOF
-							},
-							CloseFunc: func() error {
-								return nil
-							},
-						}, nil
-					},
-				}
-
+			setupMock: func() *MockSFTPClient {
 				createdFiles := make(map[string]bool)
 				mockSFTP := &MockSFTPClient{
 					MkdirAllFunc: func(path string) error {
@@ -458,8 +331,7 @@ func TestCopyPath(t *testing.T) {
 						return nil, os.ErrNotExist
 					},
 				}
-
-				return mockFS, mockSFTP
+				return mockSFTP
 			},
 			expectErr: false,
 		},
@@ -467,8 +339,8 @@ func TestCopyPath(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockFS, mockSFTP := tt.setupMock()
-			copier := NewCopier(mockFS, mockSFTP)
+			mockSFTP := tt.setupMock()
+			copier := NewCopier(mockSFTP)
 
 			err := copier.CopyPath(tt.local, tt.remote, tt.exclude)
 
@@ -527,19 +399,6 @@ func TestShouldTransferFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			mockFS := &MockFileSystem{
-				StatFunc: func(name string) (os.FileInfo, error) {
-					if tt.localErr != nil {
-						return nil, tt.localErr
-					}
-					return &MockFileInfo{
-						SizeFunc: func() int64 {
-							return tt.localSize
-						},
-					}, nil
-				},
-			}
-
 			mockSFTP := &MockSFTPClient{
 				StatFunc: func(path string) (os.FileInfo, error) {
 					if tt.remoteErr != nil {
@@ -553,7 +412,7 @@ func TestShouldTransferFile(t *testing.T) {
 				},
 			}
 
-			copier := NewCopier(mockFS, mockSFTP)
+			copier := NewCopier(mockSFTP)
 			result, err := copier.shouldTransferFile("local/path", "remote/path")
 
 			if tt.expectErr {
@@ -568,20 +427,9 @@ func TestShouldTransferFile(t *testing.T) {
 
 func TestProcessEntry(t *testing.T) {
 	t.Run("excluded file should be skipped", func(t *testing.T) {
-		// Create a proper mock file system that won't try to access files
-		mockFS := &MockFileSystem{
-			StatFunc: func(name string) (os.FileInfo, error) {
-				// We shouldn't reach this point if exclusion works correctly
-				// but provide implementation just in case
-				return &MockFileInfo{
-					IsDirFunc: func() bool { return false },
-				}, nil
-			},
-		}
-
 		mockSFTP := &MockSFTPClient{}
 
-		copier := NewCopier(mockFS, mockSFTP)
+		copier := NewCopier(mockSFTP)
 		entry := &MockDirEntry{
 			NameFunc:  func() string { return "test.log" },
 			IsDirFunc: func() bool { return false },
@@ -594,24 +442,13 @@ func TestProcessEntry(t *testing.T) {
 	})
 
 	t.Run("directory entry should copy directory", func(t *testing.T) {
-		mockFS := &MockFileSystem{
-			StatFunc: func(name string) (os.FileInfo, error) {
-				return &MockFileInfo{
-					IsDirFunc: func() bool { return true },
-				}, nil
-			},
-			ReadDirFunc: func(name string) ([]os.DirEntry, error) {
-				return []os.DirEntry{}, nil
-			},
-		}
-
 		mockSFTP := &MockSFTPClient{
 			MkdirAllFunc: func(path string) error {
 				return nil
 			},
 		}
 
-		copier := NewCopier(mockFS, mockSFTP)
+		copier := NewCopier(mockSFTP)
 		entry := &MockDirEntry{
 			NameFunc:  func() string { return "testdir" },
 			IsDirFunc: func() bool { return true },
@@ -623,23 +460,6 @@ func TestProcessEntry(t *testing.T) {
 	})
 
 	t.Run("file entry should copy file", func(t *testing.T) {
-		mockContent := []byte("test content")
-		mockFS := &MockFileSystem{
-			StatFunc: func(name string) (os.FileInfo, error) {
-				return &MockFileInfo{
-					IsDirFunc: func() bool { return false },
-				}, nil
-			},
-			OpenFunc: func(name string) (io.ReadCloser, error) {
-				return &MockReadCloser{
-					ReadFunc: func(p []byte) (n int, err error) {
-						copy(p, mockContent)
-						return len(mockContent), io.EOF
-					},
-				}, nil
-			},
-		}
-
 		mockSFTP := &MockSFTPClient{
 			CreateFunc: func(path string) (io.WriteCloser, error) {
 				return &MockWriteCloser{}, nil
@@ -649,7 +469,7 @@ func TestProcessEntry(t *testing.T) {
 			},
 		}
 
-		copier := NewCopier(mockFS, mockSFTP)
+		copier := NewCopier(mockSFTP)
 		entry := &MockDirEntry{
 			NameFunc:  func() string { return "test.txt" },
 			IsDirFunc: func() bool { return false },
