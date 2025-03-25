@@ -66,36 +66,42 @@ func (app *Application) Run() error {
 		return nil
 	}
 
-	// Create and run application
-	cliApp := cli.NewApp()
+	// Find the appropriate config path
+	configPath := app.findConfigPath()
 
+	// Execute the application with the determined config path
+	return app.executeWithConfig(configPath)
+}
+
+// findConfigPath determines which configuration file to use
+func (app *Application) findConfigPath() string {
 	// If user specified a config path directly, use that
 	if app.configPath != app.defaultConfigPaths[0] {
-		// User has explicitly specified a config path, use it directly
-		if app.noSkip {
-			return cliApp.Run(app.configPath, app.jobName, app.envPaths, app.vaultPassword)
-		}
-		return cli.RunWithSkipUnchanged(app.configPath, app.jobName, app.envPaths, app.vaultPassword, !app.noSkip)
+		return app.configPath
 	}
 
+	// Try each default config path
 	for _, configPath := range app.defaultConfigPaths {
 		// Check if file exists
 		_, err := os.Stat(configPath)
 		if err == nil {
 			// Found a config file, use it
-			if app.noSkip {
-				return cliApp.Run(configPath, app.jobName, app.envPaths, app.vaultPassword)
-			}
-			return cli.RunWithSkipUnchanged(configPath, app.jobName, app.envPaths, app.vaultPassword, !app.noSkip)
+			return configPath
 		}
 	}
 
-	// If we get here, no config file was found, use the first default path
+	// If no config file found, use the first default path
 	// This will likely lead to an error, but maintains backward compatibility
+	return app.defaultConfigPaths[0]
+}
+
+// executeWithConfig runs the application with the given config path
+func (app *Application) executeWithConfig(configPath string) error {
 	if app.noSkip {
-		return cliApp.Run(app.defaultConfigPaths[0], app.jobName, app.envPaths, app.vaultPassword)
+		cliApp := cli.NewApp()
+		return cliApp.Run(configPath, app.jobName, app.envPaths, app.vaultPassword)
 	}
-	return cli.RunWithSkipUnchanged(app.defaultConfigPaths[0], app.jobName, app.envPaths, app.vaultPassword, !app.noSkip)
+	return cli.RunWithSkipUnchanged(configPath, app.jobName, app.envPaths, app.vaultPassword, !app.noSkip)
 }
 
 func main() {

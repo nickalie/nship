@@ -243,7 +243,7 @@ func TestStepHasher_ComputeHash(t *testing.T) {
 					"label2": "value2",
 				},
 				Networks: []string{"net1", "net2"},
-				Commands: []string{"nginx", "-g", "daemon off;"},
+				Command:  []string{"nginx", "-g", "daemon off;"},
 				Restart:  "always",
 			},
 		}

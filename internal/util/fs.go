@@ -53,45 +53,63 @@ func matchGlobPattern(path, pattern string) bool {
 
 	// Handle patterns with "**"
 	if strings.Contains(pattern, "**") {
-		// Special case for patterns like "**/.idea/**"
-		if strings.HasPrefix(pattern, "**") && strings.HasSuffix(pattern, "**") {
-			// Extract the middle part between the ** wildcards
-			middle := pattern[2 : len(pattern)-2]
-			// If the middle part is found in the path, it's a match
-			if strings.Contains(path, middle) {
-				return true
-			}
-		}
-
-		// Handle pattern with ** prefix (e.g., "**/foo.txt")
-		if strings.HasPrefix(pattern, "**") {
-			patternSuffix := pattern[2:]
-			if strings.HasSuffix(path, patternSuffix) {
-				return true
-			}
-
-			// Also check if it's contained anywhere in the path
-			// This is important for patterns like "**/.idea/"
-			return strings.Contains(path, patternSuffix)
-		}
-
-		// Handle pattern with ** suffix (e.g., "foo/**")
-		if strings.HasSuffix(pattern, "**") {
-			patternPrefix := pattern[:len(pattern)-2]
-			// Check if path starts with the pattern prefix
-			return strings.HasPrefix(path, patternPrefix)
-		}
-
-		// Handle pattern with ** in the middle (e.g., "foo/**/bar")
-		parts := strings.Split(pattern, "**")
-		if len(parts) >= 2 {
-			if strings.HasPrefix(path, parts[0]) && strings.HasSuffix(path, parts[len(parts)-1]) {
-				return true
-			}
-		}
+		return matchDoubleStarPattern(path, pattern)
 	}
 
 	// Fall back to filepath.Match for simple * patterns
 	matched, _ := filepath.Match(pattern, path)
 	return matched
+}
+
+// matchDoubleStarPattern handles glob patterns containing "**"
+func matchDoubleStarPattern(path, pattern string) bool {
+	switch {
+	case isDoubleStarPrefixAndSuffix(pattern):
+		return matchDoubleStarPrefixAndSuffix(path, pattern)
+	case isDoubleStarPrefix(pattern):
+		return matchDoubleStarPrefix(path, pattern)
+	case isDoubleStarSuffix(pattern):
+		return matchDoubleStarSuffix(path, pattern)
+	default:
+		return matchDoubleStarMiddle(path, pattern)
+	}
+}
+
+// isDoubleStarPrefixAndSuffix checks if a pattern has "**" at both start and end
+func isDoubleStarPrefixAndSuffix(pattern string) bool {
+	return strings.HasPrefix(pattern, "**") && strings.HasSuffix(pattern, "**")
+}
+
+// matchDoubleStarPrefixAndSuffix handles patterns like "**/.idea/**"
+func matchDoubleStarPrefixAndSuffix(path, pattern string) bool {
+	middle := pattern[2 : len(pattern)-2]
+	return strings.Contains(path, middle)
+}
+
+// isDoubleStarPrefix checks if a pattern starts with "**"
+func isDoubleStarPrefix(pattern string) bool {
+	return strings.HasPrefix(pattern, "**")
+}
+
+// matchDoubleStarPrefix handles patterns like "**/foo.txt"
+func matchDoubleStarPrefix(path, pattern string) bool {
+	patternSuffix := pattern[2:]
+	return strings.HasSuffix(path, patternSuffix) || strings.Contains(path, patternSuffix)
+}
+
+// isDoubleStarSuffix checks if a pattern ends with "**"
+func isDoubleStarSuffix(pattern string) bool {
+	return strings.HasSuffix(pattern, "**")
+}
+
+// matchDoubleStarSuffix handles patterns like "foo/**"
+func matchDoubleStarSuffix(path, pattern string) bool {
+	patternPrefix := pattern[:len(pattern)-2]
+	return strings.HasPrefix(path, patternPrefix)
+}
+
+// matchDoubleStarMiddle handles patterns like "foo/**/bar"
+func matchDoubleStarMiddle(path, pattern string) bool {
+	parts := strings.Split(pattern, "**")
+	return len(parts) >= 2 && strings.HasPrefix(path, parts[0]) && strings.HasSuffix(path, parts[len(parts)-1])
 }
