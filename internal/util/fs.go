@@ -6,6 +6,44 @@ import (
 	"strings"
 )
 
+// matchSimpleContains checks if a path contains a pattern without wildcards
+func matchSimpleContains(normalizedPath, normalizedPattern string) bool {
+	return strings.Contains(normalizedPath, normalizedPattern)
+}
+
+// matchSimpleGlob checks if a filename matches a simple glob pattern without path separators
+func matchSimpleGlob(baseName, normalizedPattern string) bool {
+	matched, _ := filepath.Match(normalizedPattern, baseName)
+	return matched
+}
+
+// matchFullPathGlob checks if a full path matches a pattern with path separators
+func matchFullPathGlob(normalizedPath, normalizedPattern string) bool {
+	matched, _ := filepath.Match(normalizedPattern, normalizedPath)
+	return matched
+}
+
+// matchPattern checks if a single pattern matches a path
+func matchPattern(normalizedPath, normalizedPattern, baseName string) bool {
+	// Simple contains check for patterns without wildcards
+	if !strings.Contains(normalizedPattern, "*") {
+		return matchSimpleContains(normalizedPath, normalizedPattern)
+	}
+
+	// Handle patterns with **
+	if strings.Contains(normalizedPattern, "**") {
+		return matchGlobPattern(normalizedPath, normalizedPattern)
+	}
+
+	// Handle simple patterns without path separators
+	if !strings.Contains(normalizedPattern, "/") {
+		return matchSimpleGlob(baseName, normalizedPattern)
+	}
+
+	// Handle full path patterns
+	return matchFullPathGlob(normalizedPath, normalizedPattern)
+}
+
 // IsExcluded checks if a path matches any exclude pattern
 // It can check against both the full path and just the name (filename) portion
 // Supports glob patterns:
@@ -17,41 +55,11 @@ import (
 func IsExcluded(path string, exclude []string) bool {
 	// Normalize path separators to forward slash for consistency
 	normalizedPath := filepath.ToSlash(path)
-	// Get the base filename for simple pattern matching
 	baseName := filepath.Base(normalizedPath)
 
 	for _, pattern := range exclude {
-		// Normalize pattern separators
 		normalizedPattern := filepath.ToSlash(pattern)
-
-		// If pattern has no wildcards, use the original simple contains check
-		if !strings.Contains(normalizedPattern, "*") {
-			if strings.Contains(normalizedPath, normalizedPattern) {
-				return true
-			}
-			continue
-		}
-
-		// Handle ** pattern matching first
-		if strings.Contains(normalizedPattern, "**") {
-			if matched := matchGlobPattern(normalizedPath, normalizedPattern); matched {
-				return true
-			}
-			continue
-		}
-
-		// For simple patterns without path separators, match against the filename
-		if !strings.Contains(normalizedPattern, "/") {
-			matched, _ := filepath.Match(normalizedPattern, baseName)
-			if matched {
-				return true
-			}
-			continue
-		}
-
-		// For patterns with path separators, match against the full path
-		matched, _ := filepath.Match(normalizedPattern, normalizedPath)
-		if matched {
+		if matchPattern(normalizedPath, normalizedPattern, baseName) {
 			return true
 		}
 	}
