@@ -6,5 +6,6 @@ cmd/testdata
 coverage
 dist
 temp
+coverage.txt
 coverage.out
 site/docs/index.md

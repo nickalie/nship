@@ -411,6 +411,10 @@ func TestProcessEntry(t *testing.T) {
 	require.NoError(t, os.MkdirAll(localDir, 0755))
 
 	t.Run("excluded file should be skipped", func(t *testing.T) {
+		// Create the test.log file
+		testLogFile := filepath.Join(localDir, "test.log")
+		require.NoError(t, os.WriteFile(testLogFile, []byte("test content"), 0644))
+
 		mockSFTP := &MockSFTPClient{}
 
 		copier := NewCopier(mockSFTP)

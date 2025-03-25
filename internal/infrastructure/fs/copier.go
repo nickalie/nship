@@ -103,10 +103,14 @@ func (c *Copier) processEntry(entry os.DirEntry, local, remote string, exclude [
 	localPath := filepath.Join(local, entry.Name())
 	remotePath := filepath.ToSlash(filepath.Join(remote, entry.Name()))
 
-	// Use the utility package's IsExcluded function
+	// Check exclusion first, before trying to access the file
 	if util.IsExcluded(localPath, exclude) {
 		fmt.Println("Skipping excluded file:", localPath)
 		return nil
+	}
+
+	if entry.IsDir() {
+		return c.CopyDir(localPath, remotePath, exclude)
 	}
 
 	ok, err := c.shouldTransferFile(localPath, remotePath)
@@ -118,9 +122,6 @@ func (c *Copier) processEntry(entry os.DirEntry, local, remote string, exclude [
 		return nil
 	}
 
-	if entry.IsDir() {
-		return c.CopyDir(localPath, remotePath, exclude)
-	}
 	return c.CopyFile(localPath, remotePath)
 }
 
