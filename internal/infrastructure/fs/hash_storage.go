@@ -93,13 +93,10 @@ func (s *FileHashStorage) Clear() error {
 
 	s.hashes = make(map[string]StepHash)
 
-	// Remove hash file if it exists
-	hashFile := s.getHashFilePath()
-	err := os.RemoveAll(hashFile)
-
-	// Ignore errors if file doesn't exist
+	// Remove the entire hash directory
+	err := os.RemoveAll(s.baseDir)
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("failed to remove hash file: %w", err)
+		return fmt.Errorf("failed to remove hash directory: %w", err)
 	}
 
 	return nil

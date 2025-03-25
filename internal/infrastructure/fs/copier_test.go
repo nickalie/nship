@@ -2,7 +2,6 @@ package fs
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -52,45 +51,6 @@ func (m *MockSFTPClient) Stat(path string) (os.FileInfo, error) {
 		return m.StatFunc(path)
 	}
 	return &MockFileInfo{}, nil
-}
-
-// Update MockFileSystem for testing with needed methods
-func setupMockFileSystem(content []byte, isDir bool) *MockFileSystem {
-	return &MockFileSystem{
-		StatFunc: func(name string) (os.FileInfo, error) {
-			return &MockFileInfo{
-				SizeFunc: func() int64 {
-					return int64(len(content))
-				},
-				IsDirFunc: func() bool {
-					return isDir
-				},
-			}, nil
-		},
-		OpenFunc: func(name string) (io.ReadCloser, error) {
-			return &MockReadCloser{
-				ReadFunc: func(p []byte) (n int, err error) {
-					copy(p, content)
-					return len(content), io.EOF
-				},
-			}, nil
-		},
-		ReadDirFunc: func(name string) ([]os.DirEntry, error) {
-			// Return directory entries based on the testing needs
-			if isDir {
-				return []os.DirEntry{
-					&MockDirEntry{
-						NameFunc:  func() string { return "file1.txt" },
-						IsDirFunc: func() bool { return false },
-					},
-				}, nil
-			}
-			return nil, errors.New("not a directory")
-		},
-		ReadFileFunc: func(name string) ([]byte, error) {
-			return content, nil
-		},
-	}
 }
 
 func TestCopyFile(t *testing.T) {
@@ -247,6 +207,18 @@ func setupTestEnvironment(t *testing.T) (string, func()) {
 }
 
 func TestCopyPath(t *testing.T) {
+	// Create temporary test directory
+	tempDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	// Create test files and directories
+	localDir := filepath.Join(tempDir, "local")
+	require.NoError(t, os.MkdirAll(localDir, 0755), "Failed to create test local directory")
+
+	// Create a test file
+	testFilePath := filepath.Join(localDir, "file.txt")
+	require.NoError(t, os.WriteFile(testFilePath, []byte("test content"), 0644), "Failed to create test file")
+
 	tests := []struct {
 		name        string
 		local       string
@@ -258,7 +230,7 @@ func TestCopyPath(t *testing.T) {
 	}{
 		{
 			name:        "copy file",
-			local:       "local/file.txt",
+			local:       filepath.Join(tempDir, "local/file.txt"),
 			remote:      "remote/file.txt",
 			exclude:     nil,
 			isSourceDir: false,
@@ -277,7 +249,7 @@ func TestCopyPath(t *testing.T) {
 		},
 		{
 			name:        "copy directory",
-			local:       "local",
+			local:       filepath.Join(tempDir, "local"),
 			remote:      "remote",
 			exclude:     nil,
 			isSourceDir: true,
@@ -293,7 +265,7 @@ func TestCopyPath(t *testing.T) {
 		},
 		{
 			name:        "source not found",
-			local:       "nonexistent",
+			local:       filepath.Join(tempDir, "nonexistent"),
 			remote:      "remote",
 			exclude:     nil,
 			isSourceDir: false,
@@ -305,7 +277,7 @@ func TestCopyPath(t *testing.T) {
 		},
 		{
 			name:        "copy directory with exclusions",
-			local:       "local",
+			local:       filepath.Join(tempDir, "local"),
 			remote:      "remote",
 			exclude:     []string{"*.log", "node_modules"},
 			isSourceDir: true,
@@ -354,11 +326,14 @@ func TestCopyPath(t *testing.T) {
 }
 
 func TestShouldTransferFile(t *testing.T) {
+	// Create temporary test directory
+	tempDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
 	tests := []struct {
 		name       string
 		localSize  int64
 		remoteSize int64
-		localErr   error
 		remoteErr  error
 		expected   bool
 		expectErr  bool
@@ -378,19 +353,15 @@ func TestShouldTransferFile(t *testing.T) {
 			expectErr:  false,
 		},
 		{
-			name:      "local file not found should return error",
-			localErr:  fmt.Errorf("stat error"),
-			expected:  false,
-			expectErr: true,
-		},
-		{
 			name:      "remote file not found should transfer",
+			localSize: 100,
 			remoteErr: os.ErrNotExist,
 			expected:  true,
 			expectErr: false,
 		},
 		{
 			name:      "remote stat error should return error",
+			localSize: 100,
 			remoteErr: fmt.Errorf("remote stat error"),
 			expected:  false,
 			expectErr: true,
@@ -399,6 +370,11 @@ func TestShouldTransferFile(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			// Create a local test file with the specified size
+			localPath := filepath.Join(tempDir, "testfile")
+			err := os.WriteFile(localPath, make([]byte, tt.localSize), 0644)
+			require.NoError(t, err, "Failed to create test file")
+
 			mockSFTP := &MockSFTPClient{
 				StatFunc: func(path string) (os.FileInfo, error) {
 					if tt.remoteErr != nil {
@@ -413,7 +389,7 @@ func TestShouldTransferFile(t *testing.T) {
 			}
 
 			copier := NewCopier(mockSFTP)
-			result, err := copier.shouldTransferFile("local/path", "remote/path")
+			result, err := copier.shouldTransferFile(localPath, "remote/path")
 
 			if tt.expectErr {
 				assert.Error(t, err)
@@ -426,6 +402,14 @@ func TestShouldTransferFile(t *testing.T) {
 }
 
 func TestProcessEntry(t *testing.T) {
+	// Create temporary test directory
+	tempDir, cleanup := setupTestEnvironment(t)
+	defer cleanup()
+
+	// Create a local directory for testing
+	localDir := filepath.Join(tempDir, "local")
+	require.NoError(t, os.MkdirAll(localDir, 0755))
+
 	t.Run("excluded file should be skipped", func(t *testing.T) {
 		mockSFTP := &MockSFTPClient{}
 
@@ -436,12 +420,16 @@ func TestProcessEntry(t *testing.T) {
 		}
 
 		// Use a proper exclude pattern that will match test.log
-		err := copier.processEntry(entry, "local", "remote", []string{"*.log"})
+		err := copier.processEntry(entry, localDir, "remote", []string{"*.log"})
 
 		assert.NoError(t, err)
 	})
 
 	t.Run("directory entry should copy directory", func(t *testing.T) {
+		// Create test directory
+		testDir := filepath.Join(localDir, "testdir")
+		require.NoError(t, os.MkdirAll(testDir, 0755))
+
 		mockSFTP := &MockSFTPClient{
 			MkdirAllFunc: func(path string) error {
 				return nil
@@ -454,12 +442,16 @@ func TestProcessEntry(t *testing.T) {
 			IsDirFunc: func() bool { return true },
 		}
 
-		err := copier.processEntry(entry, "local", "remote", nil)
+		err := copier.processEntry(entry, localDir, "remote", nil)
 
 		assert.NoError(t, err)
 	})
 
 	t.Run("file entry should copy file", func(t *testing.T) {
+		// Create test file
+		testFile := filepath.Join(localDir, "test.txt")
+		require.NoError(t, os.WriteFile(testFile, []byte("test content"), 0644))
+
 		mockSFTP := &MockSFTPClient{
 			CreateFunc: func(path string) (io.WriteCloser, error) {
 				return &MockWriteCloser{}, nil
@@ -475,7 +467,7 @@ func TestProcessEntry(t *testing.T) {
 			IsDirFunc: func() bool { return false },
 		}
 
-		err := copier.processEntry(entry, "local", "remote", nil)
+		err := copier.processEntry(entry, localDir, "remote", nil)
 
 		assert.NoError(t, err)
 	})

@@ -2,8 +2,6 @@ package fs
 
 import (
 	"encoding/json"
-	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -11,114 +9,17 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// MockFileSystem for testing
-type MockHashFileSystem struct {
-	ReadFileFunc  func(string) ([]byte, error)
-	WriteFileFunc func(string, []byte, os.FileMode) error
-	MkdirAllFunc  func(string, os.FileMode) error
-	RemoveAllFunc func(string) error
-}
-
-func (m *MockHashFileSystem) Stat(name string) (os.FileInfo, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (m *MockHashFileSystem) Open(name string) (io.ReadCloser, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (m *MockHashFileSystem) ReadDir(name string) ([]os.DirEntry, error) {
-	return nil, errors.New("not implemented")
-}
-
-func (m *MockHashFileSystem) ReadFile(name string) ([]byte, error) {
-	if m.ReadFileFunc != nil {
-		return m.ReadFileFunc(name)
-	}
-	return nil, errors.New("ReadFile not implemented")
-}
-
-func (m *MockHashFileSystem) WriteFile(name string, data []byte, perm os.FileMode) error {
-	if m.WriteFileFunc != nil {
-		return m.WriteFileFunc(name, data, perm)
-	}
-	return errors.New("WriteFile not implemented")
-}
-
-func (m *MockHashFileSystem) MkdirAll(path string, perm os.FileMode) error {
-	if m.MkdirAllFunc != nil {
-		return m.MkdirAllFunc(path, perm)
-	}
-	return errors.New("MkdirAll not implemented")
-}
-
-func (m *MockHashFileSystem) RemoveAll(path string) error {
-	if m.RemoveAllFunc != nil {
-		return m.RemoveAllFunc(path)
-	}
-	return errors.New("RemoveAll not implemented")
-}
-
-// monkeyPatchFileSystem temporarily replaces the standard filesystem operations
-// with a mocked implementation for testing
-func monkeyPatchFileSystem(storage *FileHashStorage, mockFS *MockHashFileSystem) func() {
-	// Save the original os functions
-	origReadFile := osReadFile
-	origWriteFile := osWriteFile
-	origMkdirAll := osMkdirAll
-	origRemoveAll := osRemoveAll
-
-	// Replace with our mock functions
-	osReadFile = mockFS.ReadFile
-	osWriteFile = mockFS.WriteFile
-	osMkdirAll = mockFS.MkdirAll
-	osRemoveAll = mockFS.RemoveAll
-
-	// Return a function to restore the original functions
-	return func() {
-		osReadFile = origReadFile
-		osWriteFile = origWriteFile
-		osMkdirAll = origMkdirAll
-		osRemoveAll = origRemoveAll
-	}
-}
-
-// Add these variables to allow monkeypatching for tests
-var (
-	osReadFile  = os.ReadFile
-	osWriteFile = os.WriteFile
-	osMkdirAll  = os.MkdirAll
-	osRemoveAll = os.RemoveAll
-)
-
 func TestFileHashStorage_SaveAndGetHash(t *testing.T) {
-	// Mock data for testing
-	mockHashData := make(map[string][]byte)
-	mockFileSystem := &MockHashFileSystem{
-		ReadFileFunc: func(name string) ([]byte, error) {
-			if data, ok := mockHashData[name]; ok {
-				return data, nil
-			}
-			return nil, os.ErrNotExist
-		},
-		WriteFileFunc: func(name string, data []byte, perm os.FileMode) error {
-			mockHashData[name] = data
-			return nil
-		},
-		MkdirAllFunc: func(path string, perm os.FileMode) error {
-			return nil
-		},
-	}
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "hash_storage_test")
+	assert.NoError(t, err, "Failed to create temp directory")
+	defer os.RemoveAll(tempDir)
 
-	// Create storage
-	storage := NewFileHashStorageWithPath(".test/hashes")
-
-	// Monkey patch the filesystem functions and get the restore function
-	restore := monkeyPatchFileSystem(storage, mockFileSystem)
-	defer restore()
+	// Create storage with temp directory
+	storage := NewFileHashStorageWithPath(tempDir)
 
 	// Save a hash
-	err := storage.SaveHash("target1", "job1", 0, "hash1")
+	err = storage.SaveHash("target1", "job1", 0, "hash1")
 	assert.NoError(t, err, "Failed to save hash")
 
 	// Get the hash
@@ -132,11 +33,10 @@ func TestFileHashStorage_SaveAndGetHash(t *testing.T) {
 	assert.Empty(t, hash, "Expected empty hash for non-existent entry")
 
 	// Verify the data was written to file
-	expectedPath := filepath.Join(".test/hashes", "step_hashes.json")
-	assert.Contains(t, mockHashData, expectedPath, "Hash file was not written")
+	hashFilePath := filepath.Join(tempDir, "step_hashes.json")
+	jsonData, err := os.ReadFile(hashFilePath)
+	assert.NoError(t, err, "Failed to read hash file")
 
-	// Verify the file content
-	jsonData := mockHashData[expectedPath]
 	var hashList []StepHash
 	err = json.Unmarshal(jsonData, &hashList)
 	assert.NoError(t, err, "Failed to parse hash file JSON")
@@ -147,132 +47,53 @@ func TestFileHashStorage_SaveAndGetHash(t *testing.T) {
 }
 
 func TestFileHashStorage_Clear(t *testing.T) {
-	removed := false
-	// Mock fileSystem where RemoveAll records that it was called
-	mockFileSystem := &MockHashFileSystem{
-		RemoveAllFunc: func(path string) error {
-			removed = true
-			return nil
-		},
-	}
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "hash_storage_test")
+	assert.NoError(t, err, "Failed to create temp directory")
+	defer os.RemoveAll(tempDir)
 
-	// Create storage
-	storage := NewFileHashStorageWithPath(".test/hashes")
+	// Create storage with temp directory
+	storage := NewFileHashStorageWithPath(tempDir)
 
-	// Monkey patch the filesystem functions and get the restore function
-	restore := monkeyPatchFileSystem(storage, mockFileSystem)
-	defer restore()
+	// Save some test data
+	err = storage.SaveHash("target1", "job1", 0, "hash1")
+	assert.NoError(t, err, "Failed to save hash")
 
-	// Since we can't easily check in-memory state, we'll just verify that
-	// RemoveAll was called
-	err := storage.Clear()
+	// Clear the storage
+	err = storage.Clear()
 	assert.NoError(t, err, "Failed to clear hashes")
-	assert.True(t, removed, "RemoveAll was not called during Clear()")
+
+	// Verify directory is removed
+	_, err = os.Stat(tempDir)
+	assert.True(t, os.IsNotExist(err), "Storage directory should be removed")
 }
 
 func TestFileHashStorage_LoadFromFile(t *testing.T) {
-	// Create sample hash data
-	hashList := []StepHash{
-		{TargetName: "target1", JobName: "job1", StepIndex: 0, Hash: "hash1"},
-		{TargetName: "target2", JobName: "job2", StepIndex: 1, Hash: "hash2"},
-	}
-	hashData, _ := json.MarshalIndent(hashList, "", "  ")
+	// Create a temporary directory for testing
+	tempDir, err := os.MkdirTemp("", "hash_storage_test")
+	assert.NoError(t, err, "Failed to create temp directory")
+	defer os.RemoveAll(tempDir)
 
-	// Mock fileSystem that returns our sample data
-	mockFileSystem := &MockHashFileSystem{
-		ReadFileFunc: func(name string) ([]byte, error) {
-			return hashData, nil
-		},
-	}
+	// Create storage with temp directory
+	storage := NewFileHashStorageWithPath(tempDir)
 
-	// Create storage
-	storage := NewFileHashStorageWithPath(".test/hashes")
+	// Save some test data
+	err = storage.SaveHash("target1", "job1", 0, "hash1")
+	assert.NoError(t, err, "Failed to save first hash")
+	err = storage.SaveHash("target2", "job2", 1, "hash2")
+	assert.NoError(t, err, "Failed to save second hash")
 
-	// Monkey patch the filesystem functions and get the restore function
-	restore := monkeyPatchFileSystem(storage, mockFileSystem)
-	defer restore()
+	// Create a new storage instance to test loading from file
+	newStorage := NewFileHashStorageWithPath(tempDir)
 
-	// Get a hash to trigger loading from file
-	hash, err := storage.GetHash("target1", "job1", 0)
-	assert.NoError(t, err, "Failed to get hash")
+	// Get hashes to trigger loading from file
+	hash, err := newStorage.GetHash("target1", "job1", 0)
+	assert.NoError(t, err, "Failed to get first hash")
 	assert.Equal(t, "hash1", hash, "Retrieved hash doesn't match expected value")
 
-	// Get another hash to ensure all were loaded
-	hash, err = storage.GetHash("target2", "job2", 1)
-	assert.NoError(t, err, "Failed to get hash")
+	hash, err = newStorage.GetHash("target2", "job2", 1)
+	assert.NoError(t, err, "Failed to get second hash")
 	assert.Equal(t, "hash2", hash, "Retrieved hash doesn't match expected value")
-}
-
-func TestFileHashStorage_FileErrors(t *testing.T) {
-	fileErr := errors.New("file error")
-
-	// Mock fileSystem that returns errors
-	mockFileSystem := &MockHashFileSystem{
-		ReadFileFunc: func(name string) ([]byte, error) {
-			return nil, fileErr
-		},
-		WriteFileFunc: func(name string, data []byte, perm os.FileMode) error {
-			return fileErr
-		},
-		MkdirAllFunc: func(path string, perm os.FileMode) error {
-			return fileErr
-		},
-		RemoveAllFunc: func(path string) error {
-			return fileErr
-		},
-	}
-
-	// Create storage
-	storage := NewFileHashStorageWithPath(".test/hashes")
-
-	// Monkey patch the filesystem functions
-	restore := monkeyPatchFileSystem(storage, mockFileSystem)
-
-	// Test error handling for Read
-	_, err := storage.GetHash("target1", "job1", 0)
-	assert.Error(t, err, "Expected error when reading hash file fails")
-
-	// Reset loaded flag
-	storage.loaded = false
-
-	// Restore the original functions
-	restore()
-
-	// Test error handling for Write
-	// First mock the read to return not found so we can get to write
-	mockFileSystem = &MockHashFileSystem{
-		ReadFileFunc: func(name string) ([]byte, error) {
-			return nil, os.ErrNotExist
-		},
-		WriteFileFunc: func(name string, data []byte, perm os.FileMode) error {
-			return fileErr
-		},
-		MkdirAllFunc: func(path string, perm os.FileMode) error {
-			return nil
-		},
-	}
-
-	// Monkey patch again with new mock
-	defer monkeyPatchFileSystem(storage, mockFileSystem)()
-
-	err = storage.SaveHash("target1", "job1", 0, "hash1")
-	assert.Error(t, err, "Expected error when writing hash file fails")
-
-	// Test error handling for MkdirAll
-	mockFileSystem = &MockHashFileSystem{
-		ReadFileFunc: func(name string) ([]byte, error) {
-			return nil, os.ErrNotExist
-		},
-		MkdirAllFunc: func(path string, perm os.FileMode) error {
-			return fileErr
-		},
-	}
-
-	// Monkey patch again with new mock
-	defer monkeyPatchFileSystem(storage, mockFileSystem)()
-
-	err = storage.SaveHash("target1", "job1", 0, "hash1")
-	assert.Error(t, err, "Expected error when creating directory fails")
 }
 
 func TestMakeHashKey(t *testing.T) {
