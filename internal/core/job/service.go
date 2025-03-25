@@ -152,15 +152,17 @@ func (s *Service) shouldExecuteStep(tgt *target.Target, job *Job, stepIndex int,
 	}
 
 	currentHash, storedHash, err := s.getStepHashes(tgt, job, stepIndex, step)
+
 	if err != nil {
 		return true, err
 	}
 
-	if step.Copy != nil {
-		fmt.Printf("Stored hash: %s, computed hash %s\n", storedHash, currentHash)
+	shouldExecute := storedHash == "" || storedHash != currentHash
+	if !shouldExecute {
+		fmt.Printf("[%s] Skipping step %d in job '%s' (unchanged)\n", tgt.GetName(), stepIndex+1, job.Name)
 	}
 
-	return storedHash == "" || storedHash != currentHash, nil
+	return shouldExecute, nil
 }
 
 // ClearHashes clears all stored hashes
