@@ -1,60 +1,63 @@
+version: "2"
+run:
+  tests: true
 linters:
+  default: none
   enable:
-    - gofmt
-    - govet
-    - gocyclo
-    - gosimple
-    - ineffassign
-    - misspell
-    - revive
-    - staticcheck
-    - unused
-    - misspell
-    - gocritic
-    - dupl
-    - typecheck
-    - nakedret
     - copyloopvar
-    - prealloc
-    - unconvert
-    - stylecheck
+    - dupl
+    - gocritic
+    - gocyclo
+    - govet
     - ineffassign
     - lll
-  fast: false
-  disable-all: true
-
-linters-settings:
-  lll:
-    line-length: 140
-  misspell:
-    locale: US
-  gocyclo:
-    min-complexity: 7
-  revive:
+    - misspell
+    - nakedret
+    - prealloc
+    - revive
+    - staticcheck
+    - unconvert
+    - unused
+  settings:
+    gocritic:
+      disabled-checks:
+        - octalLiteral
+        - ifElseChain
+      enabled-tags:
+        - performance
+        - style
+    gocyclo:
+      min-complexity: 7
+    lll:
+      line-length: 140
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: exported
+          arguments:
+            - disableStutteringCheck
+  exclusions:
+    generated: lax
     rules:
-      - name: exported
-        arguments:
-          - disableStutteringCheck
-  gocritic:
-    enabled-tags:
-      - performance
-      - style
-    disabled-checks:
-      - octalLiteral
-      - ifElseChain
-
-issues:
-  exclude-dirs:
-    - vendor
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - gocyclo
-        - gocritic
-        - unused
-        - lll
-  exclude-use-default: false
-
-run:
-  timeout: 5m
-  tests: true
+      - linters:
+          - gocritic
+          - gocyclo
+          - lll
+          - unused
+        path: _test\.go
+    paths:
+      - vendor
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    generated: lax
+    paths:
+      - vendor
+      - third_party$
+      - builtin$
+      - examples$

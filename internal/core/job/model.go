@@ -23,6 +23,7 @@ type DockerBuildStep struct {
 
 // DockerStep defines Docker container configuration and execution parameters.
 type DockerStep struct {
+	Exec        string            `yaml:"exec" json:"exec" toml:"exec" validate:"omitempty"`
 	Image       string            `yaml:"image" json:"image" toml:"image" validate:"required"`
 	Name        string            `yaml:"name" json:"name" toml:"name" validate:"required"`
 	Build       *DockerBuildStep  `yaml:"build,omitempty" json:"build,omitempty" toml:"build,omitempty" validate:"omitempty"`

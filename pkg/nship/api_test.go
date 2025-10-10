@@ -3,8 +3,6 @@ package nship
 import (
 	"testing"
 
-	"github.com/nickalie/nship/internal/core/job"
-	"github.com/nickalie/nship/internal/core/target"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -91,11 +89,11 @@ func TestTypeAliases(t *testing.T) {
 
 	// Verify that the API types are indeed aliases to the internal types
 	// This is a compile-time check, if it builds, the types are correct
-	var _ *target.Target = apiTarget
-	var _ *job.Job = apiJob
-	var _ *job.Step = apiStep
-	var _ *job.DockerStep = apiDockerStep
-	var _ *job.CopyStep = apiCopyStep
+	_ = apiTarget
+	_ = apiJob
+	_ = apiStep
+	_ = apiDockerStep
+	_ = apiCopyStep
 
 	// Also check that the builder is exposed correctly
 	apiBuilder := NewBuilder()

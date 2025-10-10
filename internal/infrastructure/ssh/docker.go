@@ -19,6 +19,14 @@ func NewDockerCommandBuilder(docker *job.DockerStep) *DockerCommandBuilder {
 	return &DockerCommandBuilder{docker: docker}
 }
 
+// getDockerCommand returns the docker executable command from Exec field or "docker" as fallback
+func (b *DockerCommandBuilder) getDockerCommand() string {
+	if b.docker.Exec == "" {
+		return "docker"
+	}
+	return b.docker.Exec
+}
+
 // BuildCommands builds a list of Docker commands
 func (b *DockerCommandBuilder) BuildCommands() []string {
 	commands := make([]string, 0)
@@ -31,12 +39,12 @@ func (b *DockerCommandBuilder) BuildCommands() []string {
 
 	// Remove existing container if any
 	if b.docker.Name != "" {
-		commands = append(commands, fmt.Sprintf("docker rm -f %s 2>/dev/null || true", b.docker.Name))
+		commands = append(commands, fmt.Sprintf("%s rm -f %s 2>/dev/null || true", b.getDockerCommand(), b.docker.Name))
 	}
 
 	// Create networks if any
 	for _, network := range b.docker.Networks {
-		commands = append(commands, fmt.Sprintf("docker network create %s 2>/dev/null || true", network))
+		commands = append(commands, fmt.Sprintf("%s network create %s 2>/dev/null || true", b.getDockerCommand(), network))
 	}
 
 	// Create container
@@ -44,18 +52,18 @@ func (b *DockerCommandBuilder) BuildCommands() []string {
 
 	// Connect networks
 	for _, network := range b.docker.Networks {
-		commands = append(commands, fmt.Sprintf("docker network connect %s %s", network, b.docker.Name))
+		commands = append(commands, fmt.Sprintf("%s network connect %s %s", b.getDockerCommand(), network, b.docker.Name))
 	}
 
 	// Start container
-	commands = append(commands, fmt.Sprintf("docker start %s", b.docker.Name))
+	commands = append(commands, fmt.Sprintf("%s start %s", b.getDockerCommand(), b.docker.Name))
 
 	return commands
 }
 
 // buildDockerBuildCommand builds a docker build command
 func (b *DockerCommandBuilder) buildDockerBuildCommand() string {
-	args := []string{"docker build"}
+	args := []string{b.getDockerCommand() + " build"}
 
 	// Add tag for the image
 	args = append(args, "-t", b.docker.Image)
@@ -88,7 +96,7 @@ func (b *DockerCommandBuilder) appendDockerBuildArgs(flag string, args map[strin
 
 // buildDockerCreateCommand builds a docker create command
 func (b *DockerCommandBuilder) buildDockerCreateCommand() string {
-	args := []string{"docker create"}
+	args := []string{b.getDockerCommand() + " create"}
 	if b.docker.Name != "" {
 		args = append(args, "--name", b.docker.Name)
 	}
@@ -108,7 +116,11 @@ func (b *DockerCommandBuilder) buildDockerCreateCommand() string {
 	args = append(args, b.appendDockerArgs("-p", b.docker.Ports)...)
 	args = append(args, b.appendDockerArgs("-v", b.docker.Volumes)...)
 	args = append(args, b.appendDockerLabels("-l", b.docker.Labels)...)
-	args = append(args, b.appendDockerArgs("--network", b.docker.Networks)...)
+
+	if len(b.docker.Networks) > 0 {
+		args = append(args, "--network", b.docker.Networks[0])
+	}
+
 	args = append(args, b.docker.Image)
 	args = append(args, b.docker.Command...)
 	return strings.Join(args, " ")
@@ -145,7 +157,7 @@ func (c *SSHClient) executeDocker(step *job.Step, stepNum, totalSteps int) error
 
 	builder := NewDockerCommandBuilder(docker)
 	commands := builder.BuildCommands()
-	err = runShellCommand(session, step.GetShell(), strings.Join(commands, "\n"), os.Stdout, os.Stderr)
+	err = runShellCommand(session, step.Shell, strings.Join(commands, "\n"), os.Stdout, os.Stderr)
 
 	if err != nil {
 		return &job.DockerError{

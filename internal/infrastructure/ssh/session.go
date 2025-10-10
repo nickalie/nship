@@ -111,7 +111,10 @@ func runShellCommand(session SSHSession, shell, cmd string, stdout, stderr io.Wr
 		return fmt.Errorf("failed to get stderr pipe: %w", err)
 	}
 
-	cmd = fmt.Sprintf("%s -c %s", shell, escapeCommand(cmd))
+	if shell != "" {
+		cmd = fmt.Sprintf("%s -c %s", shell, escapeCommand(cmd))
+	}
+
 	if err := session.Start(cmd); err != nil {
 		return fmt.Errorf("failed to start command: %w", err)
 	}
