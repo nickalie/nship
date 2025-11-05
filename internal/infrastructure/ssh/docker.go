@@ -103,6 +103,9 @@ func (b *DockerCommandBuilder) buildDockerCreateCommand() string {
 	if b.docker.Restart != "" {
 		args = append(args, "--restart", b.docker.Restart)
 	}
+	if b.docker.User != "" {
+		args = append(args, "--user", b.docker.User)
+	}
 	// Get env keys and sort them for consistent order
 	envKeys := make([]string, 0, len(b.docker.Environment))
 	for k := range b.docker.Environment {

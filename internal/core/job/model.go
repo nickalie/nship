@@ -34,6 +34,7 @@ type DockerStep struct {
 	Networks    []string          `yaml:"networks" json:"networks" toml:"networks" validate:"omitempty,dive,required"`
 	Command     []string          `yaml:"command" json:"command" toml:"command" validate:"omitempty,dive,required"`
 	Restart     string            `yaml:"restart" json:"restart" toml:"restart" validate:"omitempty,oneof=no on-failure always unless-stopped"`
+	User        string            `yaml:"user,omitempty" json:"user,omitempty" toml:"user,omitempty" validate:"omitempty"`
 }
 
 // CopyStep defines source and destination paths for file copy operations.
